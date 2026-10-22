@@ -1,0 +1,10 @@
+node_modules
+dist
+backend/src/generated
+backend/prisma/migrations
+frontend/src/components/ui
+.local
+test-results
+playwright-report
+package-lock.json
+README.md

@@ -1,0 +1,35 @@
+# Dependencies (root and every workspace)
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Generated Prisma client
+backend/src/generated/
+
+# Environment files (the documented template is committed)
+.env*
+!.env.example
+
+# Local development data: embedded PostgreSQL, dev mail log
+/.local/
+
+# Playwright
+/test-results/
+/playwright-report/
+
+# Logs and OS files
+npm-debug.log*
+*.log
+.DS_Store
+*.pem
+
+# Word documents (and Word's temporary lock files)
+*.doc
+*.docx
+*.docm
+*.dot
+*.dotx
+*.dotm
+~$*

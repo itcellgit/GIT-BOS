@@ -1,0 +1,526 @@
+// Academic Curriculum Portal — database schema.
+// Design reference: README §5 (configuration layers) and §6 (data model).
+// Phase 0 covers authentication, roles, Layer 1 (Dean Academics) and Layer 2
+// (BoS Coordinator) configuration. Syllabus and review models arrive in Phases 1–2.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (tables required by Better Auth)
+// ---------------------------------------------------------------------------
+
+model User {
+  id                     String   @id @default(cuid())
+  name                   String
+  email                  String   @unique
+  emailVerified          Boolean  @default(false)
+  image                  String?
+  designation            String?
+  isActive               Boolean  @default(true)
+  /// Set when a password was given to the user (e.g. from .env); they must choose their own at next sign-in.
+  passwordChangeRequired Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  sessions          Session[]
+  accounts          Account[]
+  roles             RoleAssignment[]
+  courseAssignments CourseAssignment[]
+  auditLogs         AuditLog[]
+  syllabiEdited     Syllabus[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Roles (README §4)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN // everything, everywhere; signs in with a password; manages other Super Admins
+  ADMIN // users, departments, system settings
+  DEAN_ACADEMICS // Layer 1 configuration for the whole institution
+  BOS_COORDINATOR // Layer 2 configuration and review workflow, per department
+  HOD // read-only dashboards, per department
+  FACULTY // course coordinator / co-author (per-course assignment)
+}
+
+/// A role held by a user. Department-scoped roles (BOS_COORDINATOR, HOD, FACULTY)
+/// carry a departmentId; institution-wide roles (SUPER_ADMIN, ADMIN, DEAN_ACADEMICS) leave it null.
+model RoleAssignment {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+
+  @@unique([userId, role, departmentId])
+  @@index([departmentId])
+  @@map("role_assignment")
+}
+
+// ---------------------------------------------------------------------------
+// Institution structure
+// ---------------------------------------------------------------------------
+
+/// Single row: institution name and branding printed on documents.
+model InstitutionSettings {
+  id        Int      @id @default(1)
+  name      String
+  shortName String?
+  address   String?
+  estd      String?
+  logoPath  String?
+  updatedAt DateTime @updatedAt
+
+  @@map("institution_settings")
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  code      String   @unique // e.g. CSE, MATH
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programmes      Programme[]
+  roles           RoleAssignment[]
+  ownedCourses    Course[]         @relation("CourseOwner")
+  teachingCourses SchemeCourse[]   @relation("TeachingDepartment")
+  reviewers       Reviewer[]
+
+  @@map("department")
+}
+
+model Programme {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  code         String     @unique // e.g. BE-CSE
+  name         String // e.g. B.E. in Computer Science and Engineering
+  level        String     @default("UG")
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  schemeCourses  SchemeCourse[]
+  electiveGroups ElectiveGroup[]
+  outcomes       OutcomeItem[]
+
+  @@index([departmentId])
+  @@map("programme")
+}
+
+// ---------------------------------------------------------------------------
+// Layer 1 — Dean Academics: scheme and institution-wide rules (README §5)
+// ---------------------------------------------------------------------------
+
+enum SchemeStatus {
+  DRAFT // being configured; syllabi cannot be created yet
+  PUBLISHED // syllabus framing allowed
+  RETIRED // read-only archive
+}
+
+model Scheme {
+  id             String       @id @default(cuid())
+  code           String       @unique // e.g. "2025"
+  name           String // e.g. "2025 Scheme"
+  framework      String? // e.g. "Outcome-Based Education (OBE) and Choice-Based Credit System (CBCS)"
+  effectiveFrom  String? // e.g. "2025-26"
+  status         SchemeStatus @default(DRAFT)
+  /// Teaching weeks per semester (2025 scheme: 14)
+  teachingWeeks  Int          @default(14)
+  /// Student-effort hours per credit (2025 scheme: 30). Total hours = credits × hoursPerCredit.
+  hoursPerCredit Int          @default(30)
+  clonedFromId   String?
+  clonedFrom     Scheme?      @relation("SchemeClone", fields: [clonedFromId], references: [id], onDelete: SetNull)
+  clones         Scheme[]     @relation("SchemeClone")
+  publishedAt    DateTime?
+  retiredAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  categories     CourseCategory[]
+  formats        FormatConfig[]
+  textBlocks     TextBlock[]
+  outcomes       OutcomeItem[]
+  bloomLevels    BloomLevel[]
+  schemeCourses  SchemeCourse[]
+  electiveGroups ElectiveGroup[]
+  assignments    CourseAssignment[]
+  syllabi        Syllabus[]
+
+  @@map("scheme")
+}
+
+/// Syllabus print/entry format (README §8, Appendix B).
+enum SyllabusFormat {
+  THEORY
+  INTEGRATED
+  INTEGRATED_PROJECT
+  LAB
+}
+
+/// Course category such as PCC, IPCC, PCCL, AEC (README §5, Appendix A).
+model CourseCategory {
+  id               String           @id @default(cuid())
+  schemeId         String
+  scheme           Scheme           @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  code             String // PCC
+  name             String // Professional Core Course
+  syllabusRequired Boolean          @default(true)
+  /// Graded pass/fail (PP); credit-hour rule is not applied.
+  passFail         Boolean          @default(false)
+  hasSee           Boolean          @default(true)
+  cieMarks         Int              @default(100)
+  seeMarks         Int?             @default(100)
+  allowedFormats   SyllabusFormat[]
+  defaultFormat    SyllabusFormat?
+  sortOrder        Int              @default(0)
+
+  creditPatterns CreditPattern[]
+  schemeCourses  SchemeCourse[]
+
+  @@unique([schemeId, code])
+  @@map("course_category")
+}
+
+/// An allowed credit + weekly-hours combination for a category.
+/// Example IPCC: credits 3:0:1 → hours/week 3:0:2. Example SDC: credits 1:0:0 → hours/week 2:0:0.
+model CreditPattern {
+  id         String         @id @default(cuid())
+  categoryId String
+  category   CourseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  lCredits   Int
+  tCredits   Int
+  pCredits   Int
+  lHours     Int // per week
+  tHours     Int // per week
+  pHours     Int // per week
+
+  @@unique([categoryId, lCredits, tCredits, pCredits, lHours, tHours, pHours])
+  @@map("credit_pattern")
+}
+
+/// Per-scheme settings for each syllabus format (counts, labels, section order).
+model FormatConfig {
+  id                String         @id @default(cuid())
+  schemeId          String
+  scheme            Scheme         @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  format            SyllabusFormat
+  title             String // e.g. "UG Detailed Syllabus Template"
+  unitCount         Int            @default(5)
+  experimentCount   Int            @default(0)
+  openEndedCount    Int            @default(0)
+  cloMin            Int            @default(4)
+  cloMax            Int            @default(6)
+  coMin             Int            @default(4)
+  coMax             Int            @default(6)
+  hasReferenceBooks Boolean        @default(true)
+  prerequisiteLabel String         @default("Pre-requisites")
+  /// Section order, labels and on/off flags (used from Phase 1)
+  sections          Json?
+  layoutVersion     Int            @default(1)
+
+  @@unique([schemeId, format])
+  @@map("format_config")
+}
+
+enum TextBlockKind {
+  DELIVERY_METHODS
+  ASSESSMENT_METHODS
+  LEARNING_ACTIVITIES
+  CIE_SCHEME
+  SEE_SCHEME
+  RUBRICS
+}
+
+/// Standard text printed in syllabi; faculty can view but not edit (README §5).
+model TextBlock {
+  id          String          @id @default(cuid())
+  schemeId    String
+  scheme      Scheme          @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  kind        TextBlockKind
+  format      SyllabusFormat?
+  /// Year of study the block applies to (e.g. 2 or 3); null = all years
+  yearOfStudy Int?
+  title       String
+  body        String
+  sortOrder   Int             @default(0)
+  updatedAt   DateTime        @updatedAt
+
+  @@index([schemeId, kind])
+  @@map("text_block")
+}
+
+enum OutcomeKind {
+  PO
+  PSO
+  WK
+  SDG
+}
+
+/// PO / WK / SDG lists (institution-wide, per scheme) and PSOs (per programme, per scheme).
+model OutcomeItem {
+  id          String      @id @default(cuid())
+  schemeId    String
+  scheme      Scheme      @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  kind        OutcomeKind
+  /// Only for PSO
+  programmeId String?
+  programme   Programme?  @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  code        String // PO1, PSO2, WK3, SDG4
+  title       String
+  description String?
+  sortOrder   Int         @default(0)
+
+  @@index([schemeId, kind])
+  @@map("outcome_item")
+}
+
+/// Bloom's taxonomy levels with their action verbs (used by CO checks from Phase 1).
+model BloomLevel {
+  id        String   @id @default(cuid())
+  schemeId  String
+  scheme    Scheme   @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  level     Int // 1..6
+  name      String // Remember
+  shortCode String // Re
+  verbs     String[]
+
+  @@unique([schemeId, level])
+  @@map("bloom_level")
+}
+
+// ---------------------------------------------------------------------------
+// Layer 2 — BoS Coordinator: department course list (README §5)
+// ---------------------------------------------------------------------------
+
+/// A course identity. One syllabus is shared by every programme that lists it (README §3, Q1).
+model Course {
+  id                 String     @id @default(cuid())
+  code               String     @unique // 1BCS302
+  title              String
+  owningDepartmentId String
+  owningDepartment   Department @relation("CourseOwner", fields: [owningDepartmentId], references: [id], onDelete: Restrict)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  schemeCourses SchemeCourse[]
+  assignments   CourseAssignment[]
+  syllabi       Syllabus[]
+
+  @@index([owningDepartmentId])
+  @@map("course")
+}
+
+/// A basket of elective options, e.g. 1BCSL308x → 1BCSL308A..E.
+model ElectiveGroup {
+  id          String    @id @default(cuid())
+  schemeId    String
+  scheme      Scheme    @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  programmeId String
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  semester    Int
+  code        String // 1BCSL308x
+  title       String // Ability Enhancement Course Laboratory
+
+  options SchemeCourse[]
+
+  @@unique([schemeId, programmeId, code])
+  @@map("elective_group")
+}
+
+/// A course as it appears in a programme's scheme (one row of the scheme table).
+model SchemeCourse {
+  id                   String          @id @default(cuid())
+  schemeId             String
+  scheme               Scheme          @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  programmeId          String
+  programme            Programme       @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  semester             Int
+  courseId             String
+  course               Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  categoryId           String
+  category             CourseCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  format               SyllabusFormat?
+  teachingDepartmentId String
+  teachingDepartment   Department      @relation("TeachingDepartment", fields: [teachingDepartmentId], references: [id], onDelete: Restrict)
+  /// Credits L:T:P
+  lCredits             Int             @default(0)
+  tCredits             Int             @default(0)
+  pCredits             Int             @default(0)
+  /// Contact hours per semester (scheme table columns L, T, P, TW&SL)
+  lHours               Int             @default(0)
+  tHours               Int             @default(0)
+  pHours               Int             @default(0)
+  twSlHours            Int             @default(0)
+  cieMarks             Int             @default(100)
+  seeMarks             Int?
+  examHours            Int?
+  electiveGroupId      String?
+  electiveGroup        ElectiveGroup?  @relation(fields: [electiveGroupId], references: [id], onDelete: SetNull)
+  sortOrder            Int             @default(0)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@unique([schemeId, programmeId, courseId])
+  @@index([schemeId, programmeId, semester])
+  @@map("scheme_course")
+}
+
+enum AssignmentRole {
+  COORDINATOR
+  CO_AUTHOR
+}
+
+/// Faculty assigned to frame the syllabus of a course under a scheme. One syllabus per course per
+/// scheme is shared by every programme that lists the course (README §3, Q1), so assignments are
+/// per (scheme, course), not per programme row. Managed by the owning department's BoS Coordinator.
+model CourseAssignment {
+  id        String         @id @default(cuid())
+  schemeId  String
+  scheme    Scheme         @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      AssignmentRole @default(COORDINATOR)
+  createdAt DateTime       @default(now())
+
+  @@unique([schemeId, courseId, userId])
+  @@index([userId])
+  @@map("course_assignment")
+}
+
+// --- Syllabi (Phase 1) ------------------------------------------------------------------
+
+enum SyllabusStatus {
+  DRAFT // faculty are framing it; Phase 2 adds submission and the review stages
+}
+
+// One syllabus per (scheme, course): it serves every programme that lists the course (D13, Q1).
+// `content` is the editable working copy (README §6); immutable versions arrive in Phase 2.
+model Syllabus {
+  id          String         @id @default(cuid())
+  schemeId    String
+  scheme      Scheme         @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  courseId    String
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  format      SyllabusFormat
+  status      SyllabusStatus @default(DRAFT)
+  content     Json
+  revision    Int            @default(1) // bumped on every save; autosave sends it back to detect conflicts
+  updatedById String?
+  updatedBy   User?          @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([schemeId, courseId])
+  @@map("syllabus")
+}
+
+enum ReviewerCategory {
+  INTERNAL_BOS
+  EXTERNAL_BOS
+  INDUSTRY_EXPERT
+  ALUMNUS
+  ACADEMIC_COUNCIL
+}
+
+/// Reviewer directory. Reviewers do not log in (decision D3).
+model Reviewer {
+  id           String           @id @default(cuid())
+  departmentId String
+  department   Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name         String
+  category     ReviewerCategory
+  designation  String?
+  organisation String?
+  email        String?
+  phone        String?
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([departmentId])
+  @@map("reviewer")
+}
+
+// ---------------------------------------------------------------------------
+// Audit (README §11)
+// ---------------------------------------------------------------------------
+
+/// Append-only record of state changes and configuration changes.
+model AuditLog {
+  id           String   @id @default(cuid())
+  at           DateTime @default(now())
+  actorId      String?
+  actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action       String // e.g. "scheme.publish", "course.update"
+  entityType   String
+  entityId     String?
+  departmentId String?
+  details      Json?
+
+  @@index([entityType, entityId])
+  @@index([at])
+  @@map("audit_log")
+}

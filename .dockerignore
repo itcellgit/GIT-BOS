@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+backend/src/generated
+.git
+.local
+.env
+.env.*
+!.env.example
+test-results
+playwright-report
+coverage
+*.log

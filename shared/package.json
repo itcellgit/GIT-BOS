@@ -1,0 +1,19 @@
+{
+  "name": "@acp/shared",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Business rules, validation schemas and labels used by both the backend and the frontend.",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.js"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.4"
+  }
+}

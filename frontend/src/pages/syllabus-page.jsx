@@ -1,0 +1,210 @@
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { AlertTriangle, Check, CloudOff, FileText, Loader2 } from "lucide-react";
+import { formatLabels } from "@acp/shared/domain/schemes/rules";
+import { theoryTotals } from "@acp/shared/domain/syllabi/theory";
+import { issuesBySection, validateTheory, validationContext } from "@acp/shared/domain/syllabi/validate";
+import { assignmentRoleLabels, textBlockKindLabels } from "@acp/shared/labels";
+import { useApiQuery } from "@/hooks/use-api";
+import { useAutosave } from "@/hooks/use-autosave";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/layout/page-header";
+import { QueryState } from "@/components/layout/query-state";
+import { ChecksPanel, SectionIssueCount } from "@/components/syllabus/checks-panel";
+import {
+  BooksSection,
+  FlippedSection,
+  HeaderSection,
+  MappingSection,
+  ObjectivesSection,
+  OutcomesSection,
+  PrerequisitesSection,
+  StandardTextSection,
+  TwSlSection,
+  UnitsSection,
+} from "@/components/syllabus/theory-sections";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+
+const sections = [
+  ["checks", "Checks"],
+  ["header", "Course details"],
+  ["objectives", "Learning objectives"],
+  ["prerequisites", "Pre-requisites"],
+  ["units", "Units"],
+  ["flipped", "Flipped classroom"],
+  ["books", "Books"],
+  ["twsl", "TW and SL"],
+  ["outcomes", "Course outcomes"],
+  ["mapping", "Mapping"],
+  ["standard", "Standard sections"],
+];
+/** Section names for the checks list (sections that rules can report on). */
+const checkedSections = Object.fromEntries(sections.filter(([id]) => id !== "checks" && id !== "standard"));
+
+export function SyllabusPage() {
+  const { schemeId, courseId } = useParams();
+  // Loaded once: afterwards the editor owns the content (refetching would overwrite typing).
+  const query = useApiQuery(`/syllabi/${schemeId}/${courseId}`, { staleTime: Infinity, gcTime: 0 });
+  return (
+    <QueryState query={query}>
+      {(data) => <Editor key={`${schemeId}/${courseId}`} path={`/syllabi/${schemeId}/${courseId}`} data={data} />}
+    </QueryState>
+  );
+}
+
+function Editor({ path, data }) {
+  const [content, setContent] = useState(data.syllabus.content);
+  const latest = useRef(content);
+  latest.current = content;
+
+  /** Applies `fn` to a copy of the content (synchronously, so event values are read at once). */
+  const update = useCallback((fn) => {
+    const next = structuredClone(latest.current);
+    fn(next);
+    latest.current = next;
+    setContent(next);
+  }, []);
+
+  const autosave = useAutosave({
+    path,
+    content,
+    revision: data.syllabus.revision,
+    enabled: data.canEdit,
+    onLoadLatest: setContent,
+  });
+  const totals = useMemo(() => (content ? theoryTotals(content) : null), [content]);
+  // The same rules the API runs (README §9), re-checked on every change.
+  const issues = useMemo(() => (content ? validateTheory(content, validationContext(data)) : []), [content, data]);
+  const counts = useMemo(() => issuesBySection(issues), [issues]);
+  const navigate = useNavigate();
+  const openPreview = async () => {
+    if (data.canEdit) await autosave.saveNow(); // the preview and PDF show the saved copy
+    navigate(`${path}/preview`);
+  };
+  const ctx = data;
+  const first = data.offerings[0];
+
+  return (
+    <>
+      <PageHeader
+        back={{ href: "/", label: "Home" }}
+        title={`${data.course.code} — ${data.course.title}`}
+        description={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>{data.scheme.name}</span>
+            <span>· {data.offerings.map((o) => o.programme.code).join(", ")}</span>
+            <span>· Semester {first.semester}</span>
+            {data.format && <Badge variant="secondary">{formatLabels[data.format.format]}</Badge>}
+            <Badge variant={data.canEdit ? "warning" : "outline"}>{data.canEdit ? "Draft" : "Read-only"}</Badge>
+          </span>
+        }
+        actions={
+          <div className="flex flex-wrap items-start gap-4">
+            {data.assignments.length > 0 && (
+              <div className="text-right text-xs text-muted-foreground">
+                {data.assignments.map((a) => (
+                  <div key={a.id}>
+                    {a.name} <span className="opacity-70">({assignmentRoleLabels[a.role]})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {content && (
+              <Button variant="outline" onClick={openPreview}>
+                <FileText data-icon="inline-start" />
+                Preview &amp; PDF
+              </Button>
+            )}
+          </div>
+        }
+      />
+
+      {data.lockedReason && (
+        <Alert className="mb-6">
+          <AlertTitle>Read-only</AlertTitle>
+          <AlertDescription>{data.lockedReason}</AlertDescription>
+        </Alert>
+      )}
+
+      {autosave.conflict && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle />
+          <AlertTitle>Your latest changes were not saved</AlertTitle>
+          <AlertDescription>
+            <p>{autosave.conflict.message}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={autosave.acceptLatest}>
+              Load the saved version
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!content ? null : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_12rem]">
+          <fieldset disabled={!data.canEdit} className="min-w-0 space-y-6">
+            <ChecksPanel issues={issues} sectionLabels={checkedSections} />
+            <HeaderSection ctx={ctx} totals={totals} />
+            <ObjectivesSection content={content} update={update} ctx={ctx} />
+            <PrerequisitesSection content={content} update={update} ctx={ctx} />
+            <UnitsSection content={content} update={update} ctx={ctx} totals={totals} />
+            <FlippedSection content={content} update={update} totals={totals} />
+            <BooksSection content={content} update={update} ctx={ctx} />
+            <TwSlSection content={content} update={update} ctx={ctx} totals={totals} />
+            <OutcomesSection content={content} update={update} ctx={ctx} />
+            <MappingSection content={content} update={update} ctx={ctx} />
+            <StandardTextSection ctx={ctx} kindLabels={textBlockKindLabels} />
+          </fieldset>
+          <nav aria-label="Sections" className="hidden xl:block">
+            <ul className="sticky top-24 space-y-0.5 border-l text-sm">
+              {sections.map(([id, label]) => (
+                <li key={id}>
+                  <a
+                    href={`#${id}`}
+                    className="-ml-px flex items-center gap-2 border-l-2 border-transparent px-3 py-1 text-muted-foreground hover:border-primary hover:text-primary"
+                  >
+                    {label}
+                    {id !== "checks" && <SectionIssueCount counts={counts[id]} />}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+      )}
+
+      {data.canEdit && <SaveStatus autosave={autosave} />}
+    </>
+  );
+}
+
+/** Floating autosave indicator (bottom right). */
+function SaveStatus({ autosave }) {
+  const { status, error, savedAt, saveNow } = autosave;
+  const time = savedAt ? new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+  const views = {
+    saved: { icon: Check, text: time ? `Saved at ${time}` : "All changes saved", tone: "text-success" },
+    unsaved: { icon: null, text: "Unsaved changes", tone: "text-muted-foreground" },
+    saving: { icon: Loader2, text: "Saving…", tone: "text-muted-foreground", spin: true },
+    error: { icon: CloudOff, text: error ?? "Not saved", tone: "text-destructive" },
+    conflict: { icon: AlertTriangle, text: "Not saved: conflict", tone: "text-destructive" },
+  };
+  const view = views[status];
+  const Icon = view.icon;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed right-4 bottom-4 z-20 flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm shadow-lg"
+    >
+      {Icon && <Icon className={cn("size-4 shrink-0", view.tone, view.spin && "animate-spin")} />}
+      <span className={cn("truncate", view.tone)}>{view.text}</span>
+      {status === "error" && (
+        <Button size="xs" variant="outline" onClick={saveNow}>
+          Retry
+        </Button>
+      )}
+    </div>
+  );
+}

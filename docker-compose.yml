@@ -1,0 +1,75 @@
+# Production stack for the Hostinger VPS (README §10).
+# Services: caddy (HTTPS) → app (Express API + React build) → db (PostgreSQL); gotenberg (HTML → PDF).
+# Later phases add: worker (pg-boss jobs).
+#
+#   cp .env.example .env                                   # then fill in production values
+#   docker compose build
+#   docker compose run --rm app npm run db:deploy -w backend    # apply migrations (every deploy)
+#   docker compose run --rm app npm run db:seed -w backend      # first install only
+#   docker compose up -d
+#
+# Lost Super Admin password:  docker compose run --rm app npm run super-admin -w backend
+
+name: acp
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-acp}
+      POSTGRES_USER: ${POSTGRES_USER:-acp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  app:
+    build: { context: ., target: app }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-acp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-acp}
+      GOTENBERG_URL: http://gotenberg:3000
+    depends_on:
+      db: { condition: service_healthy }
+      gotenberg: { condition: service_started }
+    networks: [internal]
+
+  # Headless Chromium behind an HTTP API; reachable only on the internal network (README §10).
+  # The print HTML embeds its fonts and loads nothing from outside.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    mem_limit: 1g
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+    networks: [internal]
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  internal:
