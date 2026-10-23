@@ -9,6 +9,7 @@ import { sendError } from "./http/handler.js";
 import { adminRouter } from "./routes/admin.js";
 import { courseListsRouter } from "./routes/course-lists.js";
 import { departmentsRouter } from "./routes/departments.js";
+import { expertRouter } from "./routes/expert.js";
 import { meRouter } from "./routes/me.js";
 import { printRouter } from "./routes/print.js";
 import { reviewsRouter } from "./routes/reviews.js";
@@ -37,6 +38,7 @@ export function createApp() {
   app.use("/api/syllabi/:schemeId/:courseId", reviewsRouter);
   app.use("/api/syllabi", syllabiRouter);
   app.use("/api/print", printRouter);
+  app.use("/api/expert", expertRouter); // public: the review link is the credential
   app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Not found." }));
 
   // Production: the React app and its client-side routes.

@@ -24,6 +24,14 @@ const theorySections = [
   ],
   ["flipped", "Flipped classroom", (c) => c.flippedSessions.map((s, i) => `Unit ${i + 1}: ${s ?? "–"} session(s)`)],
   [
+    "experiments",
+    "Experiments",
+    (c) => [
+      ...(c.experiments ?? []).map((e, i) => `Experiment ${i + 1}: ${e.title || "(no title)"} · ${hoursOf(e.hours)}`),
+      ...(c.openEnded ?? []).map((e, i) => `Open-ended ${i + 1}: ${e.title || "(no title)"} · ${hoursOf(e.hours)}`),
+    ],
+  ],
+  [
     "books",
     "Books and e-resources",
     (c) => [
@@ -97,7 +105,7 @@ export function diffLines(before, after) {
  * Compares two Theory contents section by section.
  * @returns {{ section: string, label: string, changed: boolean, lines: ReturnType<typeof diffLines> }[]}
  */
-export function compareTheory(before, after) {
+export function compareSyllabi(before, after) {
   return theorySections.map(([section, label, toLines]) => {
     const lines = diffLines(toLines(before), toLines(after));
     return { section, label, changed: lines.some((l) => l.type !== "same"), lines };

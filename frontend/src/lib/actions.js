@@ -74,3 +74,9 @@ export const approveSyllabus = (path, values) => api.post(`${path}/approve`, val
 export const saveReviewInput = (path, inputId, values) => save(`${path}/inputs`, inputId, values);
 export const deleteReviewInput = (path, inputId) => api.delete(`${path}/inputs/${inputId}`);
 export const saveActionTaken = (path, inputId, values) => api.put(`${path}/inputs/${inputId}/action`, values);
+export const issueExpertLink = (path, values) => api.post(`${path}/expert-links`, values);
+export const revokeExpertLink = (path, linkId) => api.post(`${path}/expert-links/${linkId}/revoke`);
+
+// --- Expert review page (public; the link's token is the credential) -----------------------------------
+export const addExpertComment = (token, values) => api.post(`/expert/${token}/comments`, values);
+export const deleteExpertComment = (token, inputId) => api.delete(`/expert/${token}/comments/${inputId}`);

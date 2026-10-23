@@ -5,7 +5,7 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { printFontFiles } from "@acp/shared/print/theory-layout";
+import { printFontFiles } from "@acp/shared/print/syllabus-layout";
 
 const require = createRequire(import.meta.url);
 const fontDir = join(dirname(require.resolve("@fontsource/carlito/package.json")), "files");

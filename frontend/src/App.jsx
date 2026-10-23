@@ -5,6 +5,7 @@ import { AccountPage } from "@/pages/account-page";
 import { AdminDepartmentsPage } from "@/pages/admin-departments-page";
 import { AdminUsersPage } from "@/pages/admin-users-page";
 import { CourseListPage } from "@/pages/course-list-page";
+import { ExpertReviewPage } from "@/pages/expert-review-page";
 import { DepartmentPage } from "@/pages/department-page";
 import { HomePage } from "@/pages/home-page";
 import { LoginPage } from "@/pages/login-page";
@@ -19,6 +20,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Public: an expert opens it from their review link (no sign-in). */}
+      <Route path="/expert/:token" element={<ExpertReviewPage />} />
 
       {/* Reachable while a password change is required. */}
       <Route element={<RequireAuth allowPasswordChange />}>

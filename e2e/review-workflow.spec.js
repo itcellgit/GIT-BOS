@@ -103,7 +103,10 @@ async function pickSelect(page, label, option) {
 
 const dialog = (page) => page.getByRole("dialog");
 
-test("a syllabus goes V1.0 → V4.0, is unlocked and re-approved as V4.1", async ({ page }) => {
+test("a syllabus goes V1.0 → V4.0 with an expert's link review, is unlocked and re-approved as V4.1", async ({
+  page,
+  browser,
+}) => {
   test.setTimeout(180_000);
   await signIn(page, "bos.cse@example.edu");
 
@@ -169,9 +172,53 @@ test("a syllabus goes V1.0 → V4.0, is unlocked and re-approved as V4.1", async
   await expect(page.getByText("Industry Experts & Alumni stage")).toBeVisible();
   await expect(page.getByText("V2.0", { exact: true })).toBeVisible();
 
-  // Expert and External BOS stages without inputs → V3.0, then the Academic Council approves → V4.0.
+  // An expert reviews V2.0 through a personal link, without signing in (rule 6).
+  await page.getByRole("link", { name: /Inputs, versions/ }).click();
+  await page.getByRole("tab", { name: "Expert links" }).click();
+  await page.getByRole("button", { name: "Issue link" }).click();
+  await pickSelect(page, "Expert", new RegExp(reviewer));
+  await dialog(page).getByRole("button", { name: "Issue link" }).click();
+  const linkUrl = await page.getByRole("textbox", { name: "Expert review link" }).inputValue();
+  expect(linkUrl).toMatch(/\/expert\/[\w-]{43}$/);
+
+  const expertContext = await browser.newContext(); // no session: the link is the credential
+  const expert = await expertContext.newPage();
+  await expert.goto(new URL(linkUrl).pathname);
+  await expect(expert.getByRole("heading", { name: /E2E workflow test course/ })).toBeVisible();
+  await expect(expert.frameLocator("iframe").getByText("Deadlocks and deadlock avoidance")).toBeVisible();
+  await pickSelect(expert, "Section", "Unit 3");
+  await expert.getByLabel("Comment").fill("Include a case study on Linux scheduling in unit 3.");
+  await expert.getByRole("button", { name: "Save comment" }).click();
+  await expect(expert.getByText("Your comments (1)")).toBeVisible();
+
+  // The comment arrives as an expert-stage input; the expert stage cannot close until it is answered.
+  await page.getByRole("tab", { name: "Inputs" }).click();
+  await page.reload();
+  await expect(page.getByText(/through the review link/)).toBeVisible();
+  expect((await page.request.post(`/api${path}/close`, { data: {} })).status()).toBe(400);
+  await page.getByRole("button", { name: "Record action taken" }).click();
+  await dialog(page).getByLabel("Action taken").fill("Case study on the Linux CFS scheduler added to unit 3.");
+  await pickSelect(page, "Decision", "Accepted");
+  await dialog(page).getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Action pending")).toHaveCount(0);
+
+  // Expert and External BOS stages close → V3.0, then the Academic Council approves → V4.0.
   expect((await page.request.post(`/api${path}/close`, { data: {} })).ok()).toBe(true);
+  await expert.reload();
+  await expect(expert.getByText("The expert review has closed")).toBeVisible();
+  await expect(expert.getByRole("button", { name: "Save comment" })).toHaveCount(0);
+
+  // A revoked link stops working at once.
+  await page.getByRole("tab", { name: "Expert links" }).click();
+  await page.getByRole("button", { name: "Revoke" }).click();
+  await dialog(page).getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByText("Revoked", { exact: true })).toBeVisible();
+  await expert.reload();
+  await expect(expert.getByText("This link can no longer be used")).toBeVisible();
+  await expertContext.close();
+
   expect((await page.request.post(`/api${path}/close`, { data: {} })).ok()).toBe(true);
+  await page.goto(path);
   await page.reload();
   await expect(page.getByText("Academic Council stage")).toBeVisible();
   await page.getByRole("button", { name: "Close & approve" }).click();
@@ -195,6 +242,20 @@ test("a syllabus goes V1.0 → V4.0, is unlocked and re-approved as V4.1", async
   await dialog(page).getByLabel("Meeting reference").fill("AC/2026/15, item 2");
   await dialog(page).getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText("Official: V4.1")).toBeVisible();
+
+  // Approved versions print from a frozen PDF: the same bytes, with their checksum, every time.
+  const review = (await (await page.request.get(`/api${path}/review`)).json()).data;
+  const v40 = review.versions.find((v) => v.label === "V4.0");
+  const first = await page.request.get(`/api${path}/versions/${v40.id}/pdf`);
+  const again = await page.request.get(`/api${path}/versions/${v40.id}/pdf`);
+  expect(first.headers()["x-document-sha256"]).toMatch(/^[0-9a-f]{64}$/);
+  expect(again.headers()["x-document-sha256"]).toBe(first.headers()["x-document-sha256"]);
+  const { createHash } = await import("node:crypto");
+  expect(
+    createHash("sha256")
+      .update(await again.body())
+      .digest("hex"),
+  ).toBe(first.headers()["x-document-sha256"]);
 
   // The record: every version, the comparison, and the Action Taken reports.
   await page.getByRole("link", { name: /Inputs, versions/ }).click();

@@ -6,7 +6,7 @@ Faculty fill in their course syllabus through web forms, following the course-fo
 
 | | |
 |---|---|
-| **Status** | Phase 0 built; Phase 1 (Theory editor, validation, print layout and PDF) built 15 Oct 2026; Phase 2 review workflow (versions, inputs, stages, unlock, Action Taken report) built 23 Oct 2026 — see §12. Strategy draft v0.5 |
+| **Status** | Phase 0 built; Phase 1 (Theory editor, validation, print layout and PDF) built 15 Oct 2026; Phase 2 review workflow (versions, inputs, stages, unlock, Action Taken report) built 23 Oct 2026; Phase 3 (expert links, Integrated / Integrated-Project / Lab formats, frozen PDFs) built 23 Oct 2026 — see §12. Strategy draft v0.5 |
 | **Stack** | **PERN**, plain **JavaScript** (no TypeScript): **P**ostgreSQL 17 (Prisma) · **E**xpress 5 · **R**eact 19 (Vite, Tailwind CSS 4, shadcn/ui) · **N**ode.js 24 · Better Auth |
 | **Hosting** | Hostinger VPS (Ubuntu 24.04, Docker Compose, Caddy) |
 | **Maintained by** | In-house faculty development team |
@@ -530,6 +530,7 @@ All endpoints are under `/api` and return JSON (`{ ok, data, message }` or `{ ok
 | Departments | `GET /departments/:code`, `/reviewers`, `/schemes/:sid/courses/:cid/assignments`, `DELETE /assignments/:id` |
 | Syllabi (Phase 1) | `GET /syllabi/:schemeId/:courseId` (editor data, working copy and `validation` issues), `PUT /syllabi/:schemeId/:courseId` (autosave with `revision`; 409 on conflict), `GET /syllabi/:schemeId/:courseId/pdf` (saved copy as PDF; `?download=1` for an attachment) |
 | Review workflow (Phase 2) | under `/syllabi/:schemeId/:courseId`: `GET /review` (versions, inputs, meetings, reviewers, unlocks, approvals); `POST /submit`, `POST /versions` (save version), `POST /close` (close stage; Academic Council needs `approvedOn` + `reference`), `POST /unlock`, `POST /approve`; `GET /versions/:id`, `GET /versions/:id/pdf`; `POST/PUT/DELETE /inputs/:id`, `PUT /inputs/:id/action`; `GET /action-taken/:stage/pdf`. Meetings: `POST/PUT /departments/:code/meetings/:id` |
+| Expert links (Phase 3) | under `/syllabi/:schemeId/:courseId`: `POST /expert-links` (returns the link once), `POST /expert-links/:id/revoke`. Public, the token is the credential: `GET /expert/:token`, `POST /expert/:token/comments`, `DELETE /expert/:token/comments/:id` |
 | Print assets | `GET /print/fonts/:file` (Carlito, for the on-screen preview) |
 
 ### VPS set-up
@@ -634,7 +635,7 @@ Each phase ends with a demo to the BoS Coordinator or Dean Academics and a short
   - runs live in the editor ("Checks" panel, counts in the section list) and in the API (`validation` in `GET /syllabi/...`); Phase 2 refuses submission while errors remain
   - not yet: "every unit is referenced by a CO" (the content has no CO ↔ unit link yet)
 - Theory print layout with live preview and PDF download — **✅ built 15 Oct 2026**
-  - `shared/src/print/theory-layout.js` builds one self-contained HTML document from the syllabus JSON, section by section as in the Word template; the preview page (`/syllabi/:schemeId/:courseId/preview`) shows it in an iframe and the API turns the same HTML into the PDF
+  - `shared/src/print/syllabus-layout.js` (originally `theory-layout.js`) builds one self-contained HTML document from the syllabus JSON, section by section as in the Word template; the preview page (`/syllabi/:schemeId/:courseId/preview`) shows it in an iframe and the API turns the same HTML into the PDF
   - A4, Carlito, running header (course code, scheme, status), "Page X of Y", DRAFT watermark, table headings repeated across pages, signature block with the assigned faculty
   - CIE scheme and rubrics are picked by year of study (2nd vs 3rd year); the 2025 Theory CIE/SEE/rubric text is seeded as text blocks (`npm run db:seed` adds missing blocks to existing databases)
 - **Accept when:** a faculty member produces a Theory syllabus PDF that, printed side by side with the Word reference, matches it section for section, and the header data comes from the scheme.
@@ -670,9 +671,19 @@ Build the workflow first, then add AI on top of it in this order:
   - with AI turned off, the whole workflow still works
 
 ### Phase 3 — Expert link and remaining formats
-- Expert links (issue, expire, revoke) with comments by unit
-- Integrated, Integrated-Project and Lab/AEC formats (schemas, forms, print layouts)
-- Frozen PDFs for approved versions; optional verification QR code
+**Status: ✅ built 23 Oct 2026** (the optional QR code is not done)
+- Expert links (issue, expire, revoke) with comments by unit — **✅**
+  - review page → *Expert links* (BoS Coordinator, during the Industry Experts & Alumni stage): choose the expert from the reviewer directory and the number of days (1–60); optionally email the link
+  - the token is 256 random bits and only its SHA-256 hash is stored, so the link is shown once (revoke and reissue it if lost); one active link per expert per version
+  - the expert opens `/expert/:token` without signing in and sees the version read-only beside a comment form (section, comment). Each comment becomes a `ReviewInput` of the expert stage, given by that expert and marked "through the review link"
+  - comments can be added or removed only while the syllabus is in the expert stage; a revoked or expired link answers 410 and says why
+- Integrated, Integrated-Project and Lab/AEC formats (schemas, forms, print layouts) — **✅**
+  - one content shape for every format (`shared/src/domain/syllabi/content.js`, renamed from `theory.js`): `experiments` and `openEnded` lists sized by the format's counts; Lab/AEC has no units and no flipped classroom
+  - rules (§9): exactly the configured number of experiments and open-ended experiments, each with a title and hours, and experiment hours = the scheme's P hours; unit and flipped-class rules apply only when the format has units
+  - one print layout (`syllabus-layout.js`, `LAYOUT_VERSION` 2) prints *Practical Component* (Integrated) or *List of Experiments* (Lab) and leaves out what a format does not have; the editor shows only the format's sections (`syllabus-sections.jsx`)
+  - **to do (Dean Academics, no code needed):** CIE/SEE schemes and rubrics are seeded for Theory only; add text blocks for the other formats on the scheme page (Appendix B lists what they contain). The layouts follow Appendix B because the Word templates were not on the development machine: compare them side by side with the templates before the pilot
+- Frozen PDFs for approved versions — **✅** `GeneratedDocument`: generated right after approval (or at the first download if no PDF engine was available), stored with its SHA-256 and layout version, and served unchanged from then on (`X-Document-SHA256` header); a database trigger refuses changes to a frozen row. Optional verification QR code — not done
+- Tests: workflow, format and print unit tests; `e2e/review-workflow.spec.js` now includes an expert commenting through a real link, revocation and the frozen PDF; `e2e/formats.spec.js` covers the Lab and Integrated editors
 - **Accept when:** an external expert comments through the link, and one course of each format produces a correct PDF.
 
 ### Phase 4 — Programme level and scheme change

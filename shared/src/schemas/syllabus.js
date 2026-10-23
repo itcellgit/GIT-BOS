@@ -17,11 +17,13 @@ const book = z.object({
 
 const activity = z.object({ activity: text(500), hours });
 
-export const theoryContentSchema = z.object({
+export const syllabusContentSchema = z.object({
   objectives: rows(text(1000), 20),
   prerequisites: text(2000),
   units: rows(z.object({ title: text(300), content: text(10_000), hours }), 12),
   flippedSessions: rows(hours, 12),
+  experiments: rows(z.object({ title: text(500), hours }), 40).default([]),
+  openEnded: rows(z.object({ title: text(500), hours }), 20).default([]),
   textBooks: rows(book, 20),
   referenceBooks: rows(book, 20),
   eResources: rows(z.object({ title: text(300), url: text(1000) }), 30),
@@ -44,5 +46,5 @@ export const theoryContentSchema = z.object({
 /** Autosave request: the content plus the revision it was based on (to detect conflicting edits). */
 export const saveSyllabusSchema = z.object({
   revision: z.number().int().min(0), // 0 = the syllabus has not been saved yet
-  content: theoryContentSchema,
+  content: syllabusContentSchema,
 });

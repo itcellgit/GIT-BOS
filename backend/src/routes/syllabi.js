@@ -3,7 +3,7 @@
 // A syllabus is identified by (scheme, course): one syllabus serves every programme listing the course (D13).
 import { Router } from "express";
 import { can } from "@acp/shared/domain/auth/permissions";
-import { normalizeTheoryContent } from "@acp/shared/domain/syllabi/theory";
+import { normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
 import { syllabusHtml } from "@acp/shared/print/syllabus-document";
 import { saveSyllabusSchema } from "@acp/shared/schemas/syllabus";
 import { ConflictError, PermissionError, UserError } from "../errors.js";
@@ -55,7 +55,7 @@ syllabiRouter.put(
           revision: latest.revision,
           updatedAt: latest.updatedAt,
           updatedBy: latest.updatedBy?.name ?? null,
-          content: normalizeTheoryContent(latest.content, format),
+          content: normalizeSyllabusContent(latest.content, format),
         },
       );
     };

@@ -4,7 +4,7 @@ import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { summarizeIssues } from "@acp/shared/domain/syllabi/validate";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { SectionCard } from "@/components/syllabus/theory-sections";
+import { SectionCard } from "@/components/syllabus/syllabus-sections";
 
 /** Small dot + count shown next to a section name. */
 export function SectionIssueCount({ counts }) {

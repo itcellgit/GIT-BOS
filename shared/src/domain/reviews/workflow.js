@@ -150,7 +150,10 @@ export function sectionRefOptions(content) {
     { value: "objectives", label: "Course learning objectives" },
     { value: "prerequisites", label: "Pre-requisites" },
     ...Array.from({ length: units }, (_, i) => ({ value: `unit:${i + 1}`, label: `Unit ${i + 1}` })),
-    { value: "flipped", label: "Flipped classroom" },
+    ...(units > 0 ? [{ value: "flipped", label: "Flipped classroom" }] : []),
+    ...(content === null || content?.experiments?.length || content?.openEnded?.length
+      ? [{ value: "experiments", label: "Experiments" }]
+      : []),
     { value: "books", label: "Books and e-resources" },
     { value: "twsl", label: "Term work and self-learning" },
     { value: "outcomes", label: "Course outcomes" },

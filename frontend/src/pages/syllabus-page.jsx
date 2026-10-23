@@ -2,11 +2,11 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { AlertTriangle, Check, CloudOff, FileText, Loader2 } from "lucide-react";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
-import { theoryTotals } from "@acp/shared/domain/syllabi/theory";
+import { syllabusTotals } from "@acp/shared/domain/syllabi/content";
 import {
   issuesBySection,
   summarizeIssues,
-  validateTheory,
+  validateSyllabus,
   validationContext,
 } from "@acp/shared/domain/syllabi/validate";
 import { syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
@@ -20,6 +20,7 @@ import { ChecksPanel, SectionIssueCount } from "@/components/syllabus/checks-pan
 import { WorkflowBar } from "@/components/syllabus/workflow-bar";
 import {
   BooksSection,
+  ExperimentsSection,
   FlippedSection,
   HeaderSection,
   MappingSection,
@@ -29,26 +30,34 @@ import {
   StandardTextSection,
   TwSlSection,
   UnitsSection,
-} from "@/components/syllabus/theory-sections";
+} from "@/components/syllabus/syllabus-sections";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const sections = [
-  ["checks", "Checks"],
-  ["header", "Course details"],
-  ["objectives", "Learning objectives"],
-  ["prerequisites", "Pre-requisites"],
-  ["units", "Units"],
-  ["flipped", "Flipped classroom"],
-  ["books", "Books"],
-  ["twsl", "TW and SL"],
-  ["outcomes", "Course outcomes"],
-  ["mapping", "Mapping"],
-  ["standard", "Standard sections"],
-];
-/** Section names for the checks list (sections that rules can report on). */
-const checkedSections = Object.fromEntries(sections.filter(([id]) => id !== "checks" && id !== "standard"));
+/** The editor's sections for a format, in template order (README Appendix B). */
+function sectionsFor(format) {
+  const hasUnits = format?.unitCount > 0;
+  const hasExperiments = (format?.experimentCount ?? 0) + (format?.openEndedCount ?? 0) > 0;
+  return [
+    ["checks", "Checks"],
+    ["header", "Course details"],
+    ["objectives", "Learning objectives"],
+    ["prerequisites", format?.prerequisiteLabel ?? "Pre-requisites"],
+    ...(hasUnits
+      ? [
+          ["units", "Units"],
+          ["flipped", "Flipped classroom"],
+        ]
+      : []),
+    ...(hasExperiments ? [["experiments", hasUnits ? "Practical component" : "Experiments"]] : []),
+    ["books", "Books"],
+    ["twsl", "TW and SL"],
+    ["outcomes", "Course outcomes"],
+    ["mapping", "Mapping"],
+    ["standard", "Standard sections"],
+  ];
+}
 
 export function SyllabusPage() {
   const { schemeId, courseId } = useParams();
@@ -81,10 +90,14 @@ function Editor({ path, data }) {
     enabled: data.canEdit,
     onLoadLatest: setContent,
   });
-  const totals = useMemo(() => (content ? theoryTotals(content) : null), [content]);
+  const totals = useMemo(() => (content ? syllabusTotals(content) : null), [content]);
   // The same rules the API runs (README §9), re-checked on every change.
-  const issues = useMemo(() => (content ? validateTheory(content, validationContext(data)) : []), [content, data]);
+  const issues = useMemo(() => (content ? validateSyllabus(content, validationContext(data)) : []), [content, data]);
   const counts = useMemo(() => issuesBySection(issues), [issues]);
+  const sections = useMemo(() => sectionsFor(data.format), [data.format]);
+  const has = Object.fromEntries(sections.map(([id]) => [id, true]));
+  // Section names for the checks list (sections that rules can report on).
+  const checkedSections = Object.fromEntries(sections.filter(([id]) => id !== "checks" && id !== "standard"));
   // The server's workflow state, plus what changed on screen since it was loaded.
   const workflow = useMemo(() => {
     const edited = JSON.stringify(content) !== JSON.stringify(data.syllabus.content);
@@ -177,8 +190,9 @@ function Editor({ path, data }) {
             <HeaderSection ctx={ctx} totals={totals} />
             <ObjectivesSection content={content} update={update} ctx={ctx} />
             <PrerequisitesSection content={content} update={update} ctx={ctx} />
-            <UnitsSection content={content} update={update} ctx={ctx} totals={totals} />
-            <FlippedSection content={content} update={update} totals={totals} />
+            {has.units && <UnitsSection content={content} update={update} ctx={ctx} totals={totals} />}
+            {has.flipped && <FlippedSection content={content} update={update} totals={totals} />}
+            {has.experiments && <ExperimentsSection content={content} update={update} ctx={ctx} totals={totals} />}
             <BooksSection content={content} update={update} ctx={ctx} />
             <TwSlSection content={content} update={update} ctx={ctx} totals={totals} />
             <OutcomesSection content={content} update={update} ctx={ctx} />

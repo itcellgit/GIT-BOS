@@ -6,7 +6,7 @@
 import { actionTakenHeadings, decisionLabels, sectionRefLabel } from "../domain/reviews/workflow.js";
 import { reviewerCategoryLabels } from "../labels.js";
 import { escapeHtml as esc } from "./rich-text.js";
-import { baseCss, cssString, fontFaces } from "./theory-layout.js";
+import { baseCss, cssString, fontFaces } from "./syllabus-layout.js";
 
 const when = (value, withTime = true) =>
   new Date(value).toLocaleString("en-IN", {

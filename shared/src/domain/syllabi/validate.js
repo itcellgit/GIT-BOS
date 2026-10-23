@@ -1,4 +1,4 @@
-// Validation rules for a Theory syllabus (README §9). Pure functions, shared by the editor (live
+// Validation rules for a syllabus of any format (README §9). Pure functions, shared by the editor (live
 // checks) and the API (before submission, Phase 2). Every number comes from the scheme and format
 // configuration passed in `ctx`, never from constants.
 //
@@ -12,19 +12,19 @@
 //
 // Each issue: { severity: "error" | "warning", section, message }. `section` is the editor's
 // section id (header, objectives, units…). Errors block submission; warnings are shown for review.
-import { romanNumeral, theoryTotals } from "./theory.js";
+import { romanNumeral, syllabusTotals } from "./content.js";
 
 const filled = (s) => typeof s === "string" && s.trim() !== "";
 const isBlankRow = (row, keys) => keys.every((k) => (typeof row[k] === "string" ? !filled(row[k]) : row[k] == null));
 
-/** Validates a Theory working copy. Returns the list of issues (empty when everything passes). */
-export function validateTheory(content, ctx) {
+/** Validates a working copy against its format. Returns the list of issues (empty when everything passes). */
+export function validateSyllabus(content, ctx) {
   const issues = [];
   const error = (section, message) => issues.push({ severity: "error", section, message });
   const warning = (section, message) => issues.push({ severity: "warning", section, message });
   const { format } = ctx;
   const offering = ctx.offerings[0];
-  const totals = theoryTotals(content);
+  const totals = syllabusTotals(content);
 
   // --- Header consistency (the scheme course row; fixed by the BoS Coordinator) ------------------
   for (const o of ctx.offerings) {
@@ -57,7 +57,8 @@ export function validateTheory(content, ctx) {
   if (!filled(content.prerequisites))
     error("prerequisites", "Fill in the pre-requisites (write “Nil” if there are none).");
 
-  // --- Units ----------------------------------------------------------------------------------------------
+  // --- Units (not in the Lab/AEC format) -----------------------------------------------------------------
+  const hasUnits = format.unitCount > 0;
   if (content.units.length !== format.unitCount) {
     error("units", `The format has exactly ${format.unitCount} units (now ${content.units.length}).`);
   }
@@ -71,7 +72,7 @@ export function validateTheory(content, ctx) {
     if (missing.length) error("units", `${name}: add the ${missing.join(", ")}.`);
     else if (u.hours === 0) error("units", `${name}: contact hours cannot be 0.`);
   });
-  if (totals.unitHours !== offering.lHours) {
+  if (hasUnits && totals.unitHours !== offering.lHours) {
     error("units", `Unit hours add up to ${totals.unitHours}; the scheme has ${offering.lHours} lecture hours.`);
   }
 
@@ -85,7 +86,36 @@ export function validateTheory(content, ctx) {
       );
     }
   });
-  if (totals.flippedSessions === 0) warning("flipped", "No flipped classroom sessions are planned.");
+  if (hasUnits && totals.flippedSessions === 0) warning("flipped", "No flipped classroom sessions are planned.");
+
+  // --- Experiments (Integrated, Integrated-Project, Lab/AEC) ---------------------------------------------
+  const regular = format.experimentCount ?? 0;
+  const openEndedCount = format.openEndedCount ?? 0;
+  if (regular + openEndedCount > 0) {
+    const experiments = content.experiments ?? [];
+    const openEnded = content.openEnded ?? [];
+    if (experiments.length !== regular)
+      error("experiments", `The format has exactly ${regular} experiments (now ${experiments.length}).`);
+    if (openEnded.length !== openEndedCount)
+      error(
+        "experiments",
+        `The format has exactly ${openEndedCount} open-ended experiments (now ${openEnded.length}).`,
+      );
+    const checkRows = (rows, label) =>
+      rows.forEach((e, i) => {
+        const missing = [!filled(e.title) && "title", e.hours == null && "hours"].filter(Boolean);
+        if (missing.length) error("experiments", `${label} ${i + 1}: add the ${missing.join(" and ")}.`);
+        else if (e.hours === 0) error("experiments", `${label} ${i + 1}: hours cannot be 0.`);
+      });
+    checkRows(experiments, "Experiment");
+    checkRows(openEnded, "Open-ended experiment");
+    if (totals.experimentHours !== offering.pHours) {
+      error(
+        "experiments",
+        `Experiment hours add up to ${totals.experimentHours}; the scheme has ${offering.pHours} practical hours.`,
+      );
+    }
+  }
 
   // --- Books and e-resources ----------------------------------------------------------------------------
   const bookKeys = ["authors", "title", "publisher", "edition", "year"];

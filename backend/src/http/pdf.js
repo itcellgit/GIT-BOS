@@ -2,15 +2,17 @@ import { embeddedFontUrl, htmlToPdf, PdfUnavailableError } from "../services/pdf
 import { sendError } from "./handler.js";
 
 /**
- * Express handler that sends a PDF made from HTML. `build(req, fontUrl)` returns { html, fileName };
- * `?download=1` sends it as an attachment instead of inline.
+ * Express handler that sends a PDF. `build(req, fontUrl)` returns { html, fileName } to render, or
+ * { pdf, fileName, headers? } for a stored document. `?download=1` sends it as an attachment.
  */
 export function pdfRoute(build) {
   return async (req, res) => {
     try {
-      const { html, fileName } = await build(req, await embeddedFontUrl());
-      const pdf = await htmlToPdf(html);
+      const out = await build(req, await embeddedFontUrl());
+      const { fileName } = out;
+      const pdf = out.pdf ?? (await htmlToPdf(out.html));
       res.set({
+        ...out.headers,
         "Content-Type": "application/pdf",
         "Content-Disposition": `${req.query.download === "1" ? "attachment" : "inline"}; filename="${fileName.replace(/[^\w.-]/g, "_")}"`,
         "Cache-Control": "no-store",

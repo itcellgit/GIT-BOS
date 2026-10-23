@@ -1,4 +1,6 @@
-// Theory syllabus content: the shape of the working copy (README §6) and its running totals.
+// Syllabus content: the shape of the working copy (README §6) and its running totals. One shape serves
+// every format (README Appendix B); the format's counts decide which parts are used:
+//   Theory: units · Integrated / Integrated-Project: units + experiments · Lab/AEC: experiments only.
 // Pure functions only, shared by the editor (browser) and the API (server).
 //
 // content = {
@@ -6,6 +8,7 @@
 //   prerequisites: string
 //   units: { title, content, hours }[]         content is plain text (one topic per line is fine)
 //   flippedSessions: (number|null)[]           flipped classroom sessions, one entry per unit
+//   experiments, openEnded: { title, hours }[] lab experiments (format.experimentCount / openEndedCount)
 //   textBooks, referenceBooks: { authors, title, publisher, edition, year }[]
 //   eResources: { title, url }[]
 //   termWork, selfLearning: { activity, hours }[]
@@ -17,6 +20,7 @@ export const emptyBook = () => ({ authors: "", title: "", publisher: "", edition
 export const emptyEResource = () => ({ title: "", url: "" });
 export const emptyActivity = () => ({ activity: "", hours: null });
 export const emptyUnit = () => ({ title: "", content: "", hours: null });
+export const emptyExperiment = () => ({ title: "", hours: null });
 export const emptyOutcome = () => ({ statement: "", verb: "", level: null, pos: [], psos: {}, wks: [], sdgs: [] });
 
 const text = (v) => (typeof v === "string" ? v : "");
@@ -25,16 +29,16 @@ const codes = (v) => (Array.isArray(v) ? v.filter((c) => typeof c === "string") 
 const list = (v, normalize) => (Array.isArray(v) ? v.map((item) => normalize(item ?? {})) : []);
 const padTo = (items, count, make) => [...items, ...Array.from({ length: Math.max(0, count - items.length) }, make)];
 
-/** A new, empty Theory syllabus sized for the format (units, objectives and COs). */
-export function emptyTheoryContent(format) {
-  return normalizeTheoryContent({}, format);
+/** A new, empty syllabus sized for the format (units, experiments, objectives and COs). */
+export function emptySyllabusContent(format) {
+  return normalizeSyllabusContent({}, format);
 }
 
 /**
  * Fills in anything missing so the editor can rely on the shape. Never drops entered data: extra
  * rows stay (validation reports them), and lists are padded up to the format's minimum.
  */
-export function normalizeTheoryContent(raw, format) {
+export function normalizeSyllabusContent(raw, format) {
   const c = raw && typeof raw === "object" ? raw : {};
   const units = padTo(
     list(c.units, (u) => ({ title: text(u.title), content: text(u.content), hours: hours(u.hours) })),
@@ -47,6 +51,8 @@ export function normalizeTheoryContent(raw, format) {
     prerequisites: text(c.prerequisites),
     units,
     flippedSessions: padTo(flipped, units.length, () => null).slice(0, units.length),
+    experiments: padTo(list(c.experiments, experiment), format.experimentCount ?? 0, emptyExperiment),
+    openEnded: padTo(list(c.openEnded, experiment), format.openEndedCount ?? 0, emptyExperiment),
     textBooks: padTo(list(c.textBooks, book), 1, emptyBook),
     referenceBooks: format.hasReferenceBooks ? padTo(list(c.referenceBooks, book), 1, emptyBook) : [],
     eResources: padTo(
@@ -68,6 +74,10 @@ function book(b) {
     edition: text(b.edition),
     year: text(b.year),
   };
+}
+
+function experiment(e) {
+  return { title: text(e.title), hours: hours(e.hours) };
 }
 
 function activity(a) {
@@ -93,10 +103,11 @@ function outcome(o) {
 const sum = (values) => values.reduce((total, v) => total + (Number.isInteger(v) ? v : 0), 0);
 
 /** Running totals shown in the editor and checked by validation (README §9). */
-export function theoryTotals(content) {
+export function syllabusTotals(content) {
   return {
     unitHours: sum(content.units.map((u) => u.hours)),
     flippedSessions: sum(content.flippedSessions),
+    experimentHours: sum([...(content.experiments ?? []), ...(content.openEnded ?? [])].map((e) => e.hours)),
     twHours: sum(content.termWork.map((a) => a.hours)),
     slHours: sum(content.selfLearning.map((a) => a.hours)),
   };

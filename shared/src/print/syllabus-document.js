@@ -1,7 +1,7 @@
 // Turns the syllabus editor data (GET /api/syllabi/:schemeId/:courseId) into a printable HTML document.
 // The browser preview and the server's PDF both call this, so they always print the same thing.
 import { workingCopyStatusLabel } from "../domain/reviews/workflow.js";
-import { renderTheoryHtml } from "./theory-layout.js";
+import { renderSyllabusLayout } from "./syllabus-layout.js";
 
 /** URL of a print font file served by the API (absolute, so it also works inside an iframe). */
 export const printFontUrl = (file) => `/api/print/fonts/${file}`;
@@ -15,7 +15,7 @@ export const printFontUrl = (file) => `/api/print/fonts/${file}`;
  *   watermark); a version passes its own label, e.g. "V2.1 – Industry Experts & Alumni review".
  */
 export function syllabusHtml(data, content, options = {}) {
-  return renderTheoryHtml({
+  return renderSyllabusLayout({
     institution: data.institution,
     scheme: data.scheme,
     course: data.course,

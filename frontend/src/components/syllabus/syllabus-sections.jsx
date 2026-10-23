@@ -1,4 +1,5 @@
-// Sections of the Theory syllabus editor, in the order of the Word template (README Appendix B).
+// Sections of the syllabus editor, in the order of the Word templates (README Appendix B); the format
+// decides which appear (units for Theory and Integrated, experiments for Integrated and Lab/AEC).
 // Every section gets `content` (the working copy), `update(fn)` (mutates a copy and saves it) and
 // `ctx` (scheme course, format settings and outcome lists from GET /api/syllabi/...).
 import { Plus, Trash2 } from "lucide-react";
@@ -6,9 +7,10 @@ import {
   emptyActivity,
   emptyBook,
   emptyEResource,
+  emptyExperiment,
   emptyOutcome,
   romanNumeral,
-} from "@acp/shared/domain/syllabi/theory";
+} from "@acp/shared/domain/syllabi/content";
 import { renderRichText } from "@acp/shared/print/rich-text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -306,6 +308,52 @@ const bookFields = [
   ["edition", "Edition", "w-24"],
   ["year", "Year", "w-24"],
 ];
+
+/** Regular and open-ended experiments; their hours must add up to the scheme's practical hours. */
+export function ExperimentsSection({ content, update, ctx, totals }) {
+  const expected = offeringOf(ctx).pHours;
+  const list = (key, label, idPrefix) => (
+    <div className="space-y-2">
+      <h3 className="text-sm font-medium">{label}</h3>
+      <ol className="space-y-2">
+        {content[key].map((e, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="w-7 pt-2 text-right text-sm text-muted-foreground tabular-nums">{i + 1}.</span>
+            <Textarea
+              aria-label={`${idPrefix} ${i + 1}`}
+              rows={1}
+              className="min-h-9 flex-1"
+              placeholder="Title or aim of the experiment"
+              value={e.title}
+              onChange={(ev) => update((c) => (c[key][i].title = ev.target.value))}
+            />
+            <HoursInput
+              aria-label={`${idPrefix} ${i + 1} hours`}
+              value={e.hours}
+              onChange={(v) => update((c) => (c[key][i].hours = v))}
+            />
+            <RemoveButton
+              label={`Remove ${idPrefix.toLowerCase()} ${i + 1}`}
+              onClick={() => update((c) => c[key].splice(i, 1))}
+            />
+          </li>
+        ))}
+      </ol>
+      <AddButton onClick={() => update((c) => c[key].push(emptyExperiment()))}>Add {idPrefix.toLowerCase()}</AddButton>
+    </div>
+  );
+  return (
+    <SectionCard
+      id="experiments"
+      title={ctx.format.unitCount > 0 ? "Practical component" : "List of experiments"}
+      description={`${ctx.format.experimentCount} experiments and ${ctx.format.openEndedCount} open-ended experiments, with the hours of each. The hours must add up to the practical hours in the scheme.`}
+      status={<TotalBadge value={totals.experimentHours} expected={expected} />}
+    >
+      {list("experiments", "Experiments", "Experiment")}
+      {ctx.format.openEndedCount > 0 && list("openEnded", "Open-ended experiments", "Open-ended experiment")}
+    </SectionCard>
+  );
+}
 
 function BookList({ name, label, books, update }) {
   return (

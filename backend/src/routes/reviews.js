@@ -13,7 +13,7 @@ import {
   versionStatusLabel,
   workflowBlocker,
 } from "@acp/shared/domain/reviews/workflow";
-import { normalizeTheoryContent } from "@acp/shared/domain/syllabi/theory";
+import { normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
 import { actionTakenHtml } from "@acp/shared/print/action-taken-document";
 import { syllabusHtml } from "@acp/shared/print/syllabus-document";
 import {
@@ -21,6 +21,7 @@ import {
   approvalSchema,
   closeStageSchema,
   commitVersionSchema,
+  expertLinkSchema,
   reviewInputSchema,
   unlockSchema,
 } from "@acp/shared/schemas/review";
@@ -29,7 +30,10 @@ import { handle, zodFieldErrors } from "../http/handler.js";
 import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
-import { loadEditorData, workflowBlockers } from "../services/syllabi.js";
+import { frozenSyllabusPdf, isApprovedVersion } from "../services/documents.js";
+import { expertLinkUrl, linkStatus, newToken } from "../services/expert-links.js";
+import { sendMail } from "../infra/mail.js";
+import { buildEditorData, loadEditorData, loadSyllabusContext, workflowBlockers } from "../services/syllabi.js";
 
 export const reviewsRouter = Router({ mergeParams: true });
 
@@ -68,7 +72,7 @@ async function latestVersion(syllabusId, tx = db) {
 /** Review page data: versions, inputs, meetings to choose from, reviewers, unlocks and approvals. */
 async function reviewData(req) {
   const { user, resource, syllabus, course, scheme, rows, data } = await loadFor(req, null);
-  const [versions, inputs, meetings, reviewers, unlocks, approvals] = syllabus
+  const [versions, inputs, meetings, reviewers, unlocks, approvals, expertLinks] = syllabus
     ? await Promise.all([
         db.syllabusVersion.findMany({
           where: { syllabusId: syllabus.id },
@@ -116,8 +120,18 @@ async function reviewData(req) {
           orderBy: { createdAt: "asc" },
           include: { version: { select: { label: true } }, recordedBy: { select: { name: true } } },
         }),
+        db.expertLink.findMany({
+          where: { syllabusId: syllabus.id },
+          orderBy: { createdAt: "desc" },
+          include: {
+            reviewer: { select: reviewerSelect },
+            version: { select: { label: true } },
+            createdBy: { select: { name: true } },
+            _count: { select: { comments: true } },
+          },
+        }),
       ])
-    : [[], [], [], [], [], []];
+    : [[], [], [], [], [], [], []];
 
   return {
     institution: data.institution,
@@ -155,6 +169,7 @@ async function reviewData(req) {
       reviewedLabel: i.reviewedVersion.label,
       resultingLabel: i.resultingVersion?.label ?? null,
       createdAt: i.createdAt,
+      viaLink: !!i.expertLinkId,
       // Inputs of a closed stage are part of the record and can no longer change.
       open: data.workflow.status === "IN_REVIEW" && i.stage === data.workflow.stage,
     })),
@@ -175,6 +190,19 @@ async function reviewData(req) {
       reference: a.reference,
       by: a.recordedBy?.name ?? null,
       createdAt: a.createdAt,
+    })),
+    // The token is never stored, so a link cannot be shown again; it can be revoked and reissued.
+    expertLinks: expertLinks.map((l) => ({
+      id: l.id,
+      reviewer: l.reviewer,
+      versionLabel: l.version.label,
+      expiresAt: l.expiresAt,
+      revokedAt: l.revokedAt,
+      lastUsedAt: l.lastUsedAt,
+      status: linkStatus(l),
+      commentCount: l._count.comments,
+      createdBy: l.createdBy?.name ?? null,
+      createdAt: l.createdAt,
     })),
   };
 }
@@ -313,6 +341,25 @@ reviewsRouter.post(
 );
 
 /** Records the Academic Council decision: the version becomes official and the copy is locked. */
+/**
+ * Freezes the approved version's PDF right after the approval commits, so it is made with the layout
+ * in force at approval. If no PDF engine is available it is frozen at the first download instead.
+ */
+function freezeAfterApproval(ctx, versionId) {
+  setImmediate(async () => {
+    try {
+      const v = await db.syllabusVersion.findUnique({ where: { id: versionId } });
+      const { data } = await buildEditorData(await loadSyllabusContext(null, ctx.scheme.id, ctx.course.id));
+      await frozenSyllabusPdf(data, v, normalizeSyllabusContent(v.content, ctx.format));
+    } catch (e) {
+      console.warn(
+        `[pdf] could not freeze ${ctx.course.code} on approval; it will be frozen at first download:`,
+        e.message,
+      );
+    }
+  });
+}
+
 async function recordApproval(tx, ctx, versionId, { approvedOn, reference }) {
   await tx.syllabusApproval.create({
     data: {
@@ -338,7 +385,7 @@ reviewsRouter.post(
 
     const version = nextVersion(data.workflow, "close");
     const next = stageAfter(syllabus.stage);
-    const label = await db.$transaction(async (tx) => {
+    const { label, versionId } = await db.$transaction(async (tx) => {
       let v = null;
       if (version) {
         v = await createVersion(tx, {
@@ -365,8 +412,9 @@ reviewsRouter.post(
         version: v?.label ?? null,
         ...(finalStage ? { approvedOn: parsed.data.approvedOn, reference: parsed.data.reference } : {}),
       });
-      return v?.label ?? data.workflow.label;
+      return { label: v?.label ?? data.workflow.label, versionId: v?.id };
     });
+    if (finalStage) freezeAfterApproval(ctx, versionId);
     res.locals.message = finalStage
       ? `Approved: ${label} is the official syllabus`
       : `Stage closed. The syllabus (${label}) moves to the ${next === "EXPERT" ? "expert review" : "next stage"}.`;
@@ -409,7 +457,7 @@ reviewsRouter.post(
     const { syllabus, user, data } = ctx;
     assertAllowed("approve", data.workflow);
     const version = nextVersion(data.workflow, "approve");
-    const label = await db.$transaction(async (tx) => {
+    const { label, versionId } = await db.$transaction(async (tx) => {
       const v = version
         ? await createVersion(tx, {
             syllabus,
@@ -428,8 +476,9 @@ reviewsRouter.post(
       });
       await recordApproval(tx, ctx, v.id, body);
       await audit(tx, ctx, "syllabus.approve", { version: v.label, reference: body.reference });
-      return v.label;
+      return { label: v.label, versionId: v.id };
     });
+    freezeAfterApproval(ctx, versionId);
     res.locals.message = `Approved: ${label} is the official syllabus`;
     return { label };
   }),
@@ -462,7 +511,7 @@ async function loadVersion(req) {
       official,
       statusLabel: versionStatusLabel(v, { official }),
     },
-    content: normalizeTheoryContent(v.content, format),
+    content: normalizeSyllabusContent(v.content, format),
   };
 }
 
@@ -478,9 +527,19 @@ reviewsRouter.get(
   "/versions/:versionId/pdf",
   pdfRoute(async (req, fontUrl) => {
     const { data, version, content } = await loadVersion(req);
+    const fileName = `${data.course.code}_syllabus_${version.label}.pdf`;
+    // An approved version always prints from its frozen PDF (README §8).
+    if (await isApprovedVersion(version.id)) {
+      const doc = await frozenSyllabusPdf(data, version, content);
+      return {
+        pdf: Buffer.from(doc.pdf),
+        fileName,
+        headers: { "X-Document-SHA256": doc.sha256, "X-Layout-Version": String(doc.layoutVersion) },
+      };
+    }
     return {
       html: syllabusHtml(data, content, { fontUrl, status: { label: version.statusLabel, draft: false } }),
-      fileName: `${data.course.code}_syllabus_${version.label}.pdf`,
+      fileName,
     };
   }),
 );
@@ -608,5 +667,106 @@ reviewsRouter.put(
       });
     },
     "Action taken saved",
+  ),
+);
+
+// --- Expert review links (README §7, rule 6) ---------------------------------------------------------
+
+/** Issues a link for one expert to review the current version. The link is returned only this once. */
+reviewsRouter.post(
+  "/expert-links",
+  handle(expertLinkSchema, async ({ reviewerId, days, sendEmail }, req, res) => {
+    const ctx = await loadFor(req, "review");
+    const { syllabus, course, user } = ctx;
+    if (syllabus.status !== "IN_REVIEW" || syllabus.stage !== "EXPERT") {
+      throw new UserError("Expert links can be issued only during the Industry Experts & Alumni stage.");
+    }
+    const reviewer = await db.reviewer.findUnique({ where: { id: reviewerId } });
+    if (!reviewer || reviewer.departmentId !== course.owningDepartmentId || !reviewer.isActive) {
+      throw new UserError("Choose an active reviewer of the department.", {
+        reviewerId: "Not a reviewer of the department",
+      });
+    }
+    if (sendEmail && !reviewer.email) {
+      throw new UserError("This reviewer has no email address.", {
+        sendEmail: "Add an email address to the reviewer first",
+      });
+    }
+    const version = await latestVersion(syllabus.id);
+    const active = await db.expertLink.findFirst({
+      where: { versionId: version.id, reviewerId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+    if (active) {
+      throw new UserError(
+        `${reviewer.name} already has an active link for ${version.label}. Revoke it first to issue a new one.`,
+      );
+    }
+
+    const { token, tokenHash } = newToken();
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    const link = await db.$transaction(async (tx) => {
+      const row = await tx.expertLink.create({
+        data: {
+          syllabusId: syllabus.id,
+          versionId: version.id,
+          reviewerId,
+          tokenHash,
+          expiresAt,
+          createdById: user.id,
+        },
+      });
+      await audit(tx, ctx, "expertLink.issue", {
+        linkId: row.id,
+        reviewer: reviewer.name,
+        version: version.label,
+        expiresAt,
+      });
+      return row;
+    });
+    const url = expertLinkUrl(token);
+    if (sendEmail) {
+      const until = expiresAt.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Kolkata",
+      });
+      await sendMail({
+        to: reviewer.email,
+        subject: `Syllabus review: ${course.code} ${course.title} (${version.label})`,
+        text: `Dear ${reviewer.name},
+
+You are invited to review the syllabus of ${course.code} ${course.title} (${version.label}). Open the link below to read it and add your comments against each unit or section. No sign-in is needed.
+
+${url}
+
+The link is personal and works until ${until}.
+
+${user.name}
+BoS Coordinator`,
+      });
+    }
+    res.locals.message = sendEmail
+      ? `Link emailed to ${reviewer.email}`
+      : "Link issued. Copy it now: it is shown only once.";
+    return { id: link.id, url, expiresAt };
+  }),
+);
+
+reviewsRouter.post(
+  "/expert-links/:linkId/revoke",
+  handle(
+    null,
+    async (_data, req) => {
+      const ctx = await loadFor(req, "review");
+      const link = await db.expertLink.findFirst({ where: { id: req.params.linkId, syllabusId: ctx.syllabus.id } });
+      if (!link) throw new NotFoundError("Link not found.");
+      if (link.revokedAt) throw new UserError("This link has already been revoked.");
+      await db.$transaction(async (tx) => {
+        await tx.expertLink.update({ where: { id: link.id }, data: { revokedAt: new Date() } });
+        await audit(tx, ctx, "expertLink.revoke", { linkId: link.id });
+      });
+    },
+    "Link revoked. It no longer opens the syllabus.",
   ),
 );

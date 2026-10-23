@@ -52,7 +52,26 @@ export const actionTakenSchema = z.object({
   decision: z.enum(["ACCEPTED", "PARTLY", "NOT_ACCEPTED"], { error: "Choose a decision" }),
 });
 
+/** Issuing an expert review link (README §7, rule 6): one expert, the version under review. */
+export const expertLinkSchema = z.object({
+  reviewerId: z.string().min(1, "Choose the expert"),
+  days: z.coerce
+    .number({ error: "Enter a number of days" })
+    .int("Use a whole number of days")
+    .min(1, "At least 1 day")
+    .max(60, "At most 60 days"),
+  sendEmail: z.boolean().default(false),
+});
+
+/** A comment an expert writes against one section of the version (becomes a ReviewInput). */
+export const expertCommentSchema = z.object({
+  sectionRef: z.string().trim().min(1, "Choose a section").max(40),
+  inputText: requiredText("The comment", 4000),
+});
+
 export const reviewFormSchemas = {
+  expertLink: expertLinkSchema,
+  expertComment: expertCommentSchema,
   commitVersion: commitVersionSchema,
   closeStage: closeStageSchema,
   approval: approvalSchema,

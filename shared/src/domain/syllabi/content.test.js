@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { saveSyllabusSchema, theoryContentSchema } from "../../schemas/syllabus.js";
-import { emptyTheoryContent, normalizeTheoryContent, romanNumeral, theoryTotals } from "./theory.js";
+import { saveSyllabusSchema, syllabusContentSchema } from "../../schemas/syllabus.js";
+import { emptySyllabusContent, normalizeSyllabusContent, romanNumeral, syllabusTotals } from "./content.js";
 
 const format = { unitCount: 5, cloMin: 4, coMin: 4, hasReferenceBooks: true };
 
 describe("Theory syllabus content", () => {
   it("starts empty, sized for the format, and passes the save schema", () => {
-    const c = emptyTheoryContent(format);
+    const c = emptySyllabusContent(format);
     expect(c.units).toHaveLength(5);
     expect(c.flippedSessions).toHaveLength(5);
     expect(c.objectives).toHaveLength(4);
     expect(c.outcomes).toHaveLength(4);
-    expect(theoryContentSchema.safeParse(c).success).toBe(true);
+    expect(syllabusContentSchema.safeParse(c).success).toBe(true);
     // The first save of a new syllabus is based on revision 0.
     expect(saveSyllabusSchema.safeParse({ revision: 0, content: c }).success).toBe(true);
   });
 
   it("keeps entered data, fills gaps and drops unknown or wrongly typed values", () => {
-    const c = normalizeTheoryContent(
+    const c = normalizeSyllabusContent(
       {
         units: [{ title: "Arrays", hours: 8, extra: "x" }],
         outcomes: [{ statement: "Apply stacks", level: 3, pos: ["PO1", 7], psos: { "BE-CSE": ["PSO1"] } }],
@@ -34,11 +34,11 @@ describe("Theory syllabus content", () => {
   });
 
   it("has no reference books when the format excludes them", () => {
-    expect(emptyTheoryContent({ ...format, hasReferenceBooks: false }).referenceBooks).toEqual([]);
+    expect(emptySyllabusContent({ ...format, hasReferenceBooks: false }).referenceBooks).toEqual([]);
   });
 
   it("adds up unit hours, flipped sessions, TW and SL", () => {
-    const c = emptyTheoryContent(format);
+    const c = emptySyllabusContent(format);
     c.units.forEach((u, i) => (u.hours = [8, 8, 9, 9, 8][i]));
     c.flippedSessions = [1, 1, 2, null, 1];
     c.termWork = [{ activity: "Assignment", hours: 20 }];
@@ -46,7 +46,13 @@ describe("Theory syllabus content", () => {
       { activity: "MOOC", hours: 18 },
       { activity: "Reading", hours: null },
     ];
-    expect(theoryTotals(c)).toEqual({ unitHours: 42, flippedSessions: 5, twHours: 20, slHours: 18 });
+    expect(syllabusTotals(c)).toEqual({
+      unitHours: 42,
+      flippedSessions: 5,
+      experimentHours: 0,
+      twHours: 20,
+      slHours: 18,
+    });
   });
 
   it("writes unit numbers as roman numerals", () => {

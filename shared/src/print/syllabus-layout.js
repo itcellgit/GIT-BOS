@@ -1,13 +1,14 @@
-// Theory syllabus print layout (README §8): syllabus JSON → one self-contained HTML document.
+// Syllabus print layout (README §8): syllabus JSON → one self-contained HTML document, for every format.
 // The same HTML is used for the on-screen preview (browser) and the PDF (server, headless Chromium),
-// so what faculty see is what prints. Visual reference: "2025 Syllabus Template- UG Theory.docx".
+// so what faculty see is what prints. Visual references: the 2025 Theory, Integrated, project-based and Lab/AEC
+// templates (README §1); the format decides which sections print (Appendix B).
 //
 // Pure function, no DOM: every value is escaped here, so faculty text can never inject markup.
 // Changing the structure of this layout? Bump LAYOUT_VERSION (stored with frozen PDFs from Phase 3).
-import { romanNumeral, theoryTotals } from "../domain/syllabi/theory.js";
+import { romanNumeral, syllabusTotals } from "../domain/syllabi/content.js";
 import { escapeHtml as esc, inline, renderRichText } from "./rich-text.js";
 
-export const LAYOUT_VERSION = 1;
+export const LAYOUT_VERSION = 2; // 2: experiments (Integrated, Integrated-Project, Lab/AEC)
 
 /** Font files the layout loads, through `doc.fontUrl`. The server embeds them in PDF jobs. */
 export const printFontFiles = [
@@ -24,7 +25,7 @@ export const printFontFiles = [
  * @param {{ code: string, title: string }} doc.course
  * @param {object[]} doc.offerings    scheme course rows (programme, semester, category, credits, hours, marks)
  * @param {object} doc.format         FormatConfig (title, prerequisiteLabel, hasReferenceBooks)
- * @param {object} doc.content        normalised Theory content
+ * @param {object} doc.content        normalised content (see domain/syllabi/content.js)
  * @param {{ pos: object[], psos: { programmeCode: string, items: object[] }[] }} doc.lists
  * @param {object[]} doc.bloomLevels
  * @param {object[]} doc.textBlocks   standard text for the format
@@ -34,7 +35,7 @@ export const printFontFiles = [
  * @param {Date} [doc.generatedAt]
  * @returns {string} a complete HTML document
  */
-export function renderTheoryHtml(doc) {
+export function renderSyllabusLayout(doc) {
   const { course, content, status } = doc;
   const fontUrl = doc.fontUrl ?? ((file) => `fonts/${file}`);
   const generated = (doc.generatedAt ?? new Date()).toLocaleString("en-IN", {
@@ -55,7 +56,8 @@ export function renderTheoryHtml(doc) {
     objectivesTable(content),
     prerequisitesTable(doc),
     ...content.units.map(unitTable),
-    flippedTable(content),
+    content.units.length ? flippedTable(content) : "",
+    experimentsTable(doc),
     booksTable(doc),
     methodsTable(doc),
     learningActivities(doc),
@@ -105,7 +107,7 @@ function titleTable({ format, course }) {
 
 function headerTable({ offerings, scheme, content, course }) {
   const o = offerings[0];
-  const totals = theoryTotals(content);
+  const totals = syllabusTotals(content);
   const credits = o.lCredits + o.tCredits + o.pCredits;
   const perWeek = (h) => {
     const v = h / scheme.teachingWeeks;
@@ -120,7 +122,7 @@ function headerTable({ offerings, scheme, content, course }) {
 <tr><th>Course Code</th><td>${esc(course.code)}</td><th>Course type</th><td>${esc(o.category.code)}</td><th>Credits L:T:P</th><td>${o.lCredits}:${o.tCredits}:${o.pCredits}</td></tr>
 <tr><th>Hours/week: L:T:P</th><td colspan="3">${perWeek(o.lHours)}:${perWeek(o.tHours)}:${perWeek(o.pHours)}</td><th>Total credits</th><td>${credits}</td></tr>
 <tr><th>Total Hours of Pedagogy L:T:P:SL:TW</th><td colspan="3">${o.lHours}:${o.tHours}:${o.pHours}:${totals.slHours}:${totals.twHours} &nbsp; Total = ${credits * scheme.hoursPerCredit} Hrs</td><th>CIE Marks</th><td>${o.cieMarks}</td></tr>
-<tr><th>Flipped Classes content</th><td colspan="3">${totals.flippedSessions} Hours</td><th>SEE Marks</th><td>${o.seeMarks ?? "—"}</td></tr>
+${content.units.length ? `<tr><th>Flipped Classes content</th><td colspan="3">${totals.flippedSessions} Hours</td>` : `<tr><td colspan="4"></td>`}<th>SEE Marks</th><td>${o.seeMarks ?? "—"}</td></tr>
 </table>${offered}`;
 }
 
@@ -157,6 +159,30 @@ function flippedTable(content) {
 <table class="grid keep">
 <tr><th class="left">Unit No.</th>${heads}</tr>
 <tr><th class="left">No. for Flipped Classroom Sessions</th>${cells}</tr>
+</table>`;
+}
+
+/** Practical component (Integrated) or list of experiments (Lab/AEC), then the open-ended ones. */
+function experimentsTable({ format, content }) {
+  const experiments = content.experiments ?? [];
+  const openEnded = content.openEnded ?? [];
+  if (experiments.length + openEnded.length === 0) return "";
+  const rows = (items) =>
+    items
+      .map(
+        (e, i) =>
+          `<tr><td class="num">${i + 1}.</td><td>${multiline(e.title)}</td><td class="center">${e.hours ?? ""}</td></tr>`,
+      )
+      .join("");
+  const band = format.unitCount > 0 ? "Practical Component" : "List of Experiments";
+  return `<table class="grid">
+<colgroup><col class="num-col"><col><col style="width:12%"></colgroup>
+<thead><tr><th colspan="3" class="band">${band}</th></tr>
+<tr><th class="center">Sl. No.</th><th>Experiments</th><th class="center">Hours</th></tr></thead>
+<tbody>
+${rows(experiments)}
+${openEnded.length ? `<tr><td></td><td colspan="2"><strong>Open-ended experiments</strong></td></tr>${rows(openEnded)}` : ""}
+</tbody>
 </table>`;
 }
 

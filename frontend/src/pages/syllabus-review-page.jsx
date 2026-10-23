@@ -2,7 +2,7 @@
 // (view, PDF, compare) and the Action Taken report per stage.
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { Download, Eye, Loader2, Printer } from "lucide-react";
+import { Copy, Download, Eye, Loader2, Printer } from "lucide-react";
 import { toast } from "sonner";
 import {
   decisionLabels,
@@ -11,11 +11,11 @@ import {
   stages,
   syllabusStatusLabels,
 } from "@acp/shared/domain/reviews/workflow";
-import { compareTheory } from "@acp/shared/domain/reviews/compare";
+import { compareSyllabi } from "@acp/shared/domain/reviews/compare";
 import { reviewerCategoryLabels, toOptions } from "@acp/shared/labels";
 import { actionTakenHtml } from "@acp/shared/print/action-taken-document";
 import { useApiQuery } from "@/hooks/use-api";
-import { deleteReviewInput, saveActionTaken, saveReviewInput } from "@/lib/actions";
+import { deleteReviewInput, issueExpertLink, revokeExpertLink, saveActionTaken, saveReviewInput } from "@/lib/actions";
 import { downloadPdf, formatDate, formatDateTime } from "@/lib/download";
 import { cn } from "@/lib/utils";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
@@ -24,7 +24,9 @@ import { EmptyState, PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -57,6 +59,7 @@ function Review({ path, data }) {
         <TabsList className="flex-wrap">
           <TabsTrigger value="inputs">Inputs</TabsTrigger>
           <TabsTrigger value="versions">Versions</TabsTrigger>
+          {(data.canReview || data.expertLinks.length > 0) && <TabsTrigger value="experts">Expert links</TabsTrigger>}
           <TabsTrigger value="report">Action Taken report</TabsTrigger>
         </TabsList>
         <TabsContent value="inputs" className="pt-4">
@@ -64,6 +67,9 @@ function Review({ path, data }) {
         </TabsContent>
         <TabsContent value="versions" className="pt-4">
           <VersionsTab path={path} data={data} />
+        </TabsContent>
+        <TabsContent value="experts" className="pt-4">
+          <ExpertLinksTab path={path} data={data} />
         </TabsContent>
         <TabsContent value="report" className="pt-4">
           <ReportTab path={path} data={data} />
@@ -179,6 +185,7 @@ function InputsTab({ path, data }) {
                           ? `${i.givenBy.name} (${reviewerCategoryLabels[i.givenBy.category]}${i.givenBy.organisation ? `, ${i.givenBy.organisation}` : ""})`
                           : "Reviewer not recorded"}
                         {i.meeting && ` · meeting of ${formatDateTime(i.meeting.heldAt)}`}
+                        {i.viaLink && " · through the review link"}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -411,7 +418,7 @@ function Comparison({ path, fromId, toId }) {
   const a = useApiQuery(`${path}/versions/${fromId}`, { staleTime: Infinity });
   const b = useApiQuery(`${path}/versions/${toId}`, { staleTime: Infinity });
   const sections = useMemo(
-    () => (a.data && b.data ? compareTheory(a.data.content, b.data.content) : null),
+    () => (a.data && b.data ? compareSyllabi(a.data.content, b.data.content) : null),
     [a.data, b.data],
   );
   if (a.isError || b.isError) return <p className="text-sm text-destructive">The versions could not be loaded.</p>;
@@ -506,6 +513,145 @@ function ReportTab({ path, data }) {
         sandbox="allow-same-origin allow-modals"
         className="h-[calc(100vh-18rem)] min-h-[500px] w-full rounded-lg border bg-muted"
       />
+    </div>
+  );
+}
+
+// --- Expert links ------------------------------------------------------------------------------------------
+
+const linkStatusLabels = { ACTIVE: "Active", EXPIRED: "Expired", REVOKED: "Revoked" };
+const linkStatusVariant = { ACTIVE: "success", EXPIRED: "outline", REVOKED: "outline" };
+
+function ExpertLinksTab({ path, data }) {
+  const { workflow } = data;
+  const [issued, setIssued] = useState(null);
+  const canIssue = data.canReview && workflow.status === "IN_REVIEW" && workflow.stage === "EXPERT";
+  // Industry experts and alumni first: they are who this stage is for.
+  const reviewers = [...data.reviewers].sort(
+    (a, b) =>
+      Number(!["INDUSTRY_EXPERT", "ALUMNUS"].includes(a.category)) -
+        Number(!["INDUSTRY_EXPERT", "ALUMNUS"].includes(b.category)) || a.name.localeCompare(b.name),
+  );
+  const fields = [
+    {
+      name: "reviewerId",
+      label: "Expert",
+      type: "select",
+      options: reviewers.map((r) => ({
+        value: r.id,
+        label: `${r.name} (${reviewerCategoryLabels[r.category]}${r.organisation ? `, ${r.organisation}` : ""})`,
+      })),
+      description: reviewers.length ? undefined : "Add the expert on the department page (Reviewers tab) first.",
+    },
+    { name: "days", label: "Valid for (days)", type: "number", width: "half" },
+    { name: "sendEmail", label: "Email the link to the expert", type: "checkbox", width: "half" },
+  ];
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(issued.url);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Copy failed: select the link and copy it.");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Each expert gets a personal, time-limited link to {workflow.label ?? "the version under review"}. They read it
+          without signing in and comment against each unit or section; the comments appear under Inputs.
+        </p>
+        {canIssue && (
+          <EntityFormDialog
+            schema="expertLink"
+            title="Issue an expert review link"
+            description={`The expert will review ${workflow.label}.`}
+            fields={fields}
+            defaultValues={{ reviewerId: "", days: 14, sendEmail: false }}
+            action={(values) => issueExpertLink(path, values)}
+            onSuccess={(result) => setIssued(result.data)}
+            submitLabel="Issue link"
+            trigger={<Button>Issue link</Button>}
+          />
+        )}
+      </div>
+      {!canIssue && data.canReview && (
+        <p className="text-sm text-muted-foreground">
+          Links can be issued during the Industry Experts &amp; Alumni stage.
+        </p>
+      )}
+
+      {issued && (
+        <Alert>
+          <AlertTitle>Copy the link now</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>For security only a fingerprint of the link is stored, so it cannot be shown again.</p>
+            <div className="flex gap-2">
+              <Input readOnly value={issued.url} aria-label="Expert review link" onFocus={(e) => e.target.select()} />
+              <Button variant="outline" onClick={copy}>
+                <Copy data-icon="inline-start" />
+                Copy
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {data.expertLinks.length === 0 ? (
+        <EmptyState>No expert links issued yet.</EmptyState>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Expert</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Last opened</TableHead>
+                <TableHead>Comments</TableHead>
+                {data.canReview && <TableHead className="w-0" />}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.expertLinks.map((l) => (
+                <TableRow key={l.id}>
+                  <TableCell className="whitespace-normal">
+                    <div className="font-medium">{l.reviewer.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {[l.reviewer.designation, l.reviewer.organisation].filter(Boolean).join(", ")}
+                    </div>
+                  </TableCell>
+                  <TableCell>{l.versionLabel}</TableCell>
+                  <TableCell>
+                    <Badge variant={linkStatusVariant[l.status]}>{linkStatusLabels[l.status]}</Badge>
+                    <div className="text-xs text-muted-foreground">
+                      {l.status === "REVOKED" ? `on ${formatDate(l.revokedAt)}` : `until ${formatDate(l.expiresAt)}`}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{l.lastUsedAt ? formatDateTime(l.lastUsedAt) : "Not yet"}</TableCell>
+                  <TableCell>{l.commentCount}</TableCell>
+                  {data.canReview && (
+                    <TableCell>
+                      {l.status === "ACTIVE" && (
+                        <ConfirmActionButton
+                          action={() => revokeExpertLink(path, l.id)}
+                          label="Revoke"
+                          variant="outline"
+                          title={`Revoke ${l.reviewer.name}'s link?`}
+                          description="The link stops working at once. Comments already given stay recorded."
+                          confirmLabel="Revoke"
+                        />
+                      )}
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

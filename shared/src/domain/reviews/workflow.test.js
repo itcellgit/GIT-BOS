@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emptyTheoryContent } from "../syllabi/theory.js";
-import { compareTheory, diffLines } from "./compare.js";
+import { emptySyllabusContent } from "../syllabi/content.js";
+import { compareSyllabi, diffLines } from "./compare.js";
 import {
   nextVersion,
   pendingInputs,
@@ -116,10 +116,10 @@ describe("version comparison", () => {
 
   it("reports only the sections that changed", () => {
     const format = { unitCount: 5, cloMin: 1, coMin: 1, hasReferenceBooks: true };
-    const before = emptyTheoryContent(format);
+    const before = emptySyllabusContent(format);
     const after = structuredClone(before);
     after.units[2].title = "Graphs";
-    const changed = compareTheory(before, after).filter((s) => s.changed);
+    const changed = compareSyllabi(before, after).filter((s) => s.changed);
     expect(changed.map((s) => s.section)).toEqual(["units"]);
     expect(changed[0].lines.find((l) => l.type === "added").text).toMatch(/^Unit 3: Graphs/);
   });

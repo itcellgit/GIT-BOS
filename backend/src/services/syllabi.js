@@ -2,19 +2,26 @@
 // permissions, and its place in the review workflow. Used by the editor routes and the review routes.
 import { can } from "@acp/shared/domain/auth/permissions";
 import { pendingInputs, versionLabel, workflowBlocker } from "@acp/shared/domain/reviews/workflow";
-import { emptyTheoryContent, normalizeTheoryContent } from "@acp/shared/domain/syllabi/theory";
-import { summarizeIssues, validateTheory, validationContext } from "@acp/shared/domain/syllabi/validate";
+import { emptySyllabusContent, normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
+import { summarizeIssues, validateSyllabus, validationContext } from "@acp/shared/domain/syllabi/validate";
 import { assertSignedIn } from "../auth/session.js";
 import { NotFoundError, PermissionError } from "../errors.js";
 import { db } from "../infra/db.js";
 
-/** Formats with an editor so far. Integrated, project-based and Lab arrive in Phase 3. */
-const editableFormats = ["THEORY"];
+/** Formats with an editor (all four since Phase 3). */
+const editableFormats = ["THEORY", "INTEGRATED", "INTEGRATED_PROJECT", "LAB"];
 
 /** Everything the editor needs, plus what the signed-in user may do. Throws 403/404. */
-export async function loadContext(req) {
+export function loadContext(req) {
   const user = assertSignedIn(req);
-  const { schemeId, courseId } = req.params;
+  return loadSyllabusContext(user, req.params.schemeId, req.params.courseId);
+}
+
+/**
+ * Loads a syllabus and its surroundings. `user` null is only for callers that have authorised the
+ * request another way (an expert's review link): then no permission is checked and nothing is editable.
+ */
+export async function loadSyllabusContext(user, schemeId, courseId) {
   const [scheme, course, rows, assignments, syllabus] = await Promise.all([
     db.scheme.findUnique({ where: { id: schemeId } }),
     db.course.findUnique({ where: { id: courseId }, include: { owningDepartment: true } }),
@@ -40,9 +47,9 @@ export async function loadContext(req) {
 
   const resource = {
     departmentId: course.owningDepartmentId,
-    isAssigned: assignments.some((a) => a.userId === user.id),
+    isAssigned: !!user && assignments.some((a) => a.userId === user.id),
   };
-  if (!can(user, "syllabus.view", resource)) throw new PermissionError();
+  if (user && !can(user, "syllabus.view", resource)) throw new PermissionError();
 
   const first = rows[0];
   const formatKey = syllabus?.format ?? first.format ?? first.category.defaultFormat;
@@ -130,7 +137,11 @@ export function workflowBlockers(state) {
  * Also returns the loaded context (`ctx`) for routes that go on to change the syllabus.
  */
 export async function loadEditorData(req) {
-  const ctx = await loadContext(req);
+  return buildEditorData(await loadContext(req));
+}
+
+/** loadEditorData for an already loaded context. */
+export async function buildEditorData(ctx) {
   const { user, scheme, course, rows, assignments, syllabus, format, resource, lockedReason } = ctx;
   const [institution, outcomes, bloomLevels, textBlocks] = await Promise.all([
     db.institutionSettings.findUnique({ where: { id: 1 } }),
@@ -214,13 +225,13 @@ export async function loadEditorData(req) {
         : null,
       content: format
         ? syllabus
-          ? normalizeTheoryContent(syllabus.content, format)
-          : emptyTheoryContent(format)
+          ? normalizeSyllabusContent(syllabus.content, format)
+          : emptySyllabusContent(format)
         : null,
     },
   };
   // The same rules the editor runs live (README §9); submitting and saving a version refuse errors.
-  data.validation = format ? validateTheory(data.syllabus.content, validationContext(data)) : [];
+  data.validation = format ? validateSyllabus(data.syllabus.content, validationContext(data)) : [];
   data.workflow = await workflowState(syllabus, summarizeIssues(data.validation).errors);
   return { ctx, data };
 }

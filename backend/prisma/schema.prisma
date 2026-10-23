@@ -29,6 +29,7 @@ model User {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
+  expertLinksIssued ExpertLink[]
   sessions          Session[]
   accounts          Account[]
   roles             RoleAssignment[]
@@ -501,10 +502,11 @@ model Syllabus {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  versions  SyllabusVersion[]
-  inputs    ReviewInput[]
-  unlocks   SyllabusUnlock[]
-  approvals SyllabusApproval[]
+  expertLinks ExpertLink[]
+  versions    SyllabusVersion[]
+  inputs      ReviewInput[]
+  unlocks     SyllabusUnlock[]
+  approvals   SyllabusApproval[]
 
   @@unique([schemeId, courseId])
   @@map("syllabus")
@@ -535,9 +537,11 @@ model SyllabusVersion {
   createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime      @default(now())
 
-  officialFor     Syllabus?          @relation("OfficialVersion")
-  reviewedInputs  ReviewInput[]      @relation("ReviewedVersion")
-  resultingInputs ReviewInput[]      @relation("ResultingVersion")
+  expertLinks     ExpertLink[]
+  documents       GeneratedDocument[]
+  officialFor     Syllabus?           @relation("OfficialVersion")
+  reviewedInputs  ReviewInput[]       @relation("ReviewedVersion")
+  resultingInputs ReviewInput[]       @relation("ResultingVersion")
   approvals       SyllabusApproval[]
 
   @@unique([syllabusId, major, minor])
@@ -595,6 +599,9 @@ model ReviewInput {
   resultingVersion   SyllabusVersion? @relation("ResultingVersion", fields: [resultingVersionId], references: [id], onDelete: Restrict)
   createdById        String?
   createdBy          User?            @relation("InputRecorder", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Set when an expert entered the input through a review link.
+  expertLinkId       String?
+  expertLink         ExpertLink?      @relation(fields: [expertLinkId], references: [id], onDelete: Restrict)
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -658,8 +665,9 @@ model Reviewer {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  inputs   ReviewInput[]
-  meetings ReviewMeeting[] @relation("MeetingAttendees")
+  expertLinks ExpertLink[]
+  inputs      ReviewInput[]
+  meetings    ReviewMeeting[] @relation("MeetingAttendees")
 
   @@index([departmentId])
   @@map("reviewer")
@@ -684,4 +692,52 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([at])
   @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: expert review links and frozen documents (README §7 rule 6, §8)
+// ---------------------------------------------------------------------------
+
+/// A secure, time-limited link through which an expert (who does not sign in) reviews one version.
+/// Only the SHA-256 hash of the token is stored; the link itself is shown once when it is issued.
+model ExpertLink {
+  id          String          @id @default(cuid())
+  syllabusId  String
+  syllabus    Syllabus        @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  versionId   String
+  version     SyllabusVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  reviewerId  String
+  reviewer    Reviewer        @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+  tokenHash   String          @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdById String?
+  createdBy   User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+
+  comments ReviewInput[]
+
+  @@index([syllabusId])
+  @@map("expert_link")
+}
+
+enum DocumentKind {
+  SYLLABUS
+}
+
+/// A PDF generated once and kept unchanged (README §8: approved versions are frozen).
+model GeneratedDocument {
+  id            String          @id @default(cuid())
+  versionId     String
+  version       SyllabusVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  kind          DocumentKind
+  pdf           Bytes
+  sha256        String
+  layoutVersion Int
+  frozen        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+
+  @@unique([versionId, kind])
+  @@map("generated_document")
 }
