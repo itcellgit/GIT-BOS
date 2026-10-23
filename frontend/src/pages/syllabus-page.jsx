@@ -34,6 +34,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+import { CarryForwardCard } from "@/components/syllabus/carry-forward-card";
+import { RevisionAlert } from "@/components/syllabus/revision-alert";
 import { SyllabusStatusBadge } from "@/components/syllabus/status-badge";
 /** The editor's sections for a format, in template order (README Appendix B). */
 function sectionsFor(format) {
@@ -65,7 +67,14 @@ export function SyllabusPage() {
   const query = useApiQuery(`/syllabi/${schemeId}/${courseId}`, { staleTime: Infinity, gcTime: 0 });
   return (
     <QueryState query={query}>
-      {(data) => <Editor key={`${schemeId}/${courseId}`} path={`/syllabi/${schemeId}/${courseId}`} data={data} />}
+      {(data) => (
+        // Remounts when the syllabus is created on the server (carried forward), so the editor takes its content.
+        <Editor
+          key={`${schemeId}/${courseId}/${data.syllabus.id ?? "new"}`}
+          path={`/syllabi/${schemeId}/${courseId}`}
+          data={data}
+        />
+      )}
     </QueryState>
   );
 }
@@ -128,6 +137,12 @@ function Editor({ path, data }) {
             <span>· Semester {first.semester}</span>
             {data.format && <Badge variant="secondary">{formatLabels[data.format.format]}</Badge>}
             <SyllabusStatusBadge status={data.workflow.status} />
+            {data.syllabus.carriedFrom && (
+              <span>
+                · Carried forward from {data.syllabus.carriedFrom.courseCode}, {data.syllabus.carriedFrom.schemeName}{" "}
+                {data.syllabus.carriedFrom.label}
+              </span>
+            )}
             {!data.canEdit && (
               <Badge variant="outline">
                 <Eye />
@@ -167,6 +182,9 @@ function Editor({ path, data }) {
           }}
         />
       )}
+
+      <RevisionAlert path={path} flags={data.revisionFlags} canReview={data.canReview} />
+      {data.canEdit && !data.syllabus.id && <CarryForwardCard path={path} sources={data.carryForward.sources} />}
 
       {data.lockedReason && data.workflow.status !== "APPROVED" && (
         <Alert className="mb-6">

@@ -8,6 +8,7 @@ import { attachUser } from "./auth/session.js";
 import { sendError } from "./http/handler.js";
 import { adminRouter } from "./routes/admin.js";
 import { courseListsRouter } from "./routes/course-lists.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 import { departmentsRouter } from "./routes/departments.js";
 import { expertRouter } from "./routes/expert.js";
 import { meRouter } from "./routes/me.js";
@@ -32,6 +33,7 @@ export function createApp() {
   app.use("/api", attachUser);
   app.use("/api", meRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/dashboard", dashboardRouter);
   app.use("/api/schemes/:schemeId/programmes/:programmeId", courseListsRouter);
   app.use("/api/schemes", schemesRouter);
   app.use("/api/departments", departmentsRouter);

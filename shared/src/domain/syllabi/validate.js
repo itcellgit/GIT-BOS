@@ -17,6 +17,10 @@ import { romanNumeral, syllabusTotals } from "./content.js";
 const filled = (s) => typeof s === "string" && s.trim() !== "";
 const isBlankRow = (row, keys) => keys.every((k) => (typeof row[k] === "string" ? !filled(row[k]) : row[k] == null));
 
+/** "I, II and V" */
+const listText = (items) =>
+  items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
 /** Validates a working copy against its format. Returns the list of issues (empty when everything passes). */
 export function validateSyllabus(content, ctx) {
   const issues = [];
@@ -187,6 +191,33 @@ export function validateSyllabus(content, ctx) {
       warning("outcomes", `${name}: the statement does not use the action verb “${co.verb.trim()}”.`);
     }
   });
+
+  // --- Coverage (warnings, README §9): every unit is the basis of a CO, and every CO names its units ----------
+  // One line each, so a syllabus written before COs had units gets two warnings, not one per unit and CO.
+  if (hasUnits && outcomes.some((co) => filled(co.statement))) {
+    const covered = new Set(outcomes.flatMap((co) => co.units ?? []));
+    const uncovered = content.units.map((_, i) => i + 1).filter((n) => !covered.has(n));
+    if (uncovered.length) {
+      const names = uncovered.map(romanNumeral);
+      warning(
+        "outcomes",
+        uncovered.length === 1
+          ? `Unit ${names[0]} is not covered by any CO.`
+          : `Units ${listText(names)} are not covered by any CO.`,
+      );
+    }
+    const named = (pred) =>
+      outcomes.map((co, i) => (filled(co.statement) && pred(co.units ?? []) ? `CO${i + 1}` : null)).filter(Boolean);
+    const without = named((units) => units.length === 0);
+    if (without.length) {
+      warning(
+        "outcomes",
+        `${listText(without)}: tick the units ${without.length === 1 ? "it is" : "they are"} based on.`,
+      );
+    }
+    const unknown = named((units) => units.some((n) => n > content.units.length));
+    if (unknown.length) warning("outcomes", `${listText(unknown)}: refers to a unit the syllabus does not have.`);
+  }
 
   // --- Mapping (tick marks, D2) --------------------------------------------------------------------------
   outcomes.forEach((co, i) => {

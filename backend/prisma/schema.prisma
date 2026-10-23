@@ -38,10 +38,12 @@ model User {
   syllabiEdited     Syllabus[]
   versionsCreated   SyllabusVersion[]
   meetingsCreated   ReviewMeeting[]
-  inputsRecorded    ReviewInput[]      @relation("InputRecorder")
-  inputsAnswered    ReviewInput[]      @relation("InputResponder")
+  inputsRecorded    ReviewInput[]          @relation("InputRecorder")
+  inputsAnswered    ReviewInput[]          @relation("InputResponder")
   unlocks           SyllabusUnlock[]
   approvals         SyllabusApproval[]
+  amendments        SchemeAmendment[]
+  flagsResolved     SyllabusRevisionFlag[]
 
   @@map("user")
 }
@@ -215,6 +217,7 @@ model Scheme {
   assignments    CourseAssignment[]
   syllabi        Syllabus[]
   reviewMeetings ReviewMeeting[]
+  amendments     SchemeAmendment[]
 
   @@map("scheme")
 }
@@ -497,16 +500,20 @@ model Syllabus {
   /// The approved version in force (README §7, rule 5).
   officialVersionId String?          @unique
   officialVersion   SyllabusVersion? @relation("OfficialVersion", fields: [officialVersionId], references: [id], onDelete: Restrict)
+  /// Phase 4: the version of an earlier scheme's syllabus this working copy was carried forward from.
+  carriedFromId     String?
+  carriedFrom       SyllabusVersion? @relation("CarriedForward", fields: [carriedFromId], references: [id], onDelete: Restrict)
   updatedById       String?
   updatedBy         User?            @relation(fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  expertLinks ExpertLink[]
-  versions    SyllabusVersion[]
-  inputs      ReviewInput[]
-  unlocks     SyllabusUnlock[]
-  approvals   SyllabusApproval[]
+  expertLinks   ExpertLink[]
+  versions      SyllabusVersion[]
+  inputs        ReviewInput[]
+  unlocks       SyllabusUnlock[]
+  approvals     SyllabusApproval[]
+  revisionFlags SyllabusRevisionFlag[]
 
   @@unique([schemeId, courseId])
   @@map("syllabus")
@@ -543,6 +550,7 @@ model SyllabusVersion {
   reviewedInputs  ReviewInput[]       @relation("ReviewedVersion")
   resultingInputs ReviewInput[]       @relation("ResultingVersion")
   approvals       SyllabusApproval[]
+  carriedInto     Syllabus[]          @relation("CarriedForward")
 
   @@unique([syllabusId, major, minor])
   @@map("syllabus_version")
@@ -740,4 +748,51 @@ model GeneratedDocument {
 
   @@unique([versionId, kind])
   @@map("generated_document")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: scheme amendments (README §5 "Scheme lifecycle")
+// ---------------------------------------------------------------------------
+
+/// A Layer-1 change made while the scheme is published. Each syllabus it can affect gets a
+/// "Needs revision" flag (SyllabusRevisionFlag) and its checks are re-run.
+model SchemeAmendment {
+  id            String   @id @default(cuid())
+  schemeId      String
+  scheme        Scheme   @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  action        String // the audit action, e.g. "category.update"
+  summary       String // e.g. "Category PCC changed"
+  details       Json?
+  affectedCount Int      @default(0)
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  flags SyllabusRevisionFlag[]
+
+  @@index([schemeId, createdAt])
+  @@map("scheme_amendment")
+}
+
+/// "Needs revision": a syllabus that an amendment may affect. Resolved when the next version is
+/// saved (the correction), or when the BoS Coordinator records that no change is needed.
+model SyllabusRevisionFlag {
+  id           String          @id @default(cuid())
+  syllabusId   String
+  syllabus     Syllabus        @relation(fields: [syllabusId], references: [id], onDelete: Cascade)
+  amendmentId  String
+  amendment    SchemeAmendment @relation(fields: [amendmentId], references: [id], onDelete: Cascade)
+  /// Result of re-running the checks just after the amendment (null until they have run).
+  errorCount   Int?
+  warningCount Int?
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?           @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  /// e.g. "Saved as V2.1", or the BoS Coordinator's note
+  resolution   String?
+  createdAt    DateTime        @default(now())
+
+  @@unique([syllabusId, amendmentId])
+  @@index([syllabusId, resolvedAt])
+  @@map("syllabus_revision_flag")
 }

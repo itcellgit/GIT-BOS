@@ -5,12 +5,14 @@ import { Router } from "express";
 import { can } from "@acp/shared/domain/auth/permissions";
 import { normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
 import { syllabusHtml } from "@acp/shared/print/syllabus-document";
+import { carryForwardSchema } from "@acp/shared/schemas/config";
 import { saveSyllabusSchema } from "@acp/shared/schemas/syllabus";
 import { ConflictError, PermissionError, UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
 import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
+import { carryForwardSyllabus } from "../services/carry-forward.js";
 import { loadContext, loadEditorData } from "../services/syllabi.js";
 
 export const syllabiRouter = Router();
@@ -31,6 +33,44 @@ syllabiRouter.get(
       fileName: `${data.course.code}_syllabus_draft.pdf`,
     };
   }),
+);
+
+/**
+ * Starts the working copy from a version of an earlier scheme's syllabus (Phase 4, README §5). Only for a
+ * syllabus that has not been started; the checks then run with this scheme's rules, and submitting makes V1.0.
+ */
+syllabiRouter.post(
+  "/:schemeId/:courseId/carry-forward",
+  handle(
+    carryForwardSchema,
+    async ({ versionId }, req) => {
+      const { user, scheme, course, syllabus, format, resource, lockedReason } = await loadContext(req);
+      if (!can(user, "syllabus.edit", resource)) throw new PermissionError();
+      if (lockedReason) throw new UserError(lockedReason);
+      if (syllabus) throw new UserError("This syllabus has already been started, so it cannot be replaced.");
+      try {
+        await db.$transaction(async (tx) => {
+          const row = await carryForwardSyllabus(tx, { scheme, course, format, versionId, userId: user.id });
+          await writeAudit(
+            {
+              actorId: user.id,
+              action: "syllabus.carryForward",
+              entityType: "Syllabus",
+              entityId: row.id,
+              departmentId: course.owningDepartmentId,
+              details: { schemeId: scheme.id, courseCode: course.code, fromVersionId: versionId },
+            },
+            tx,
+          );
+        });
+      } catch (e) {
+        if (e?.code === "P2002")
+          throw new UserError("A colleague started this syllabus a moment ago. Reload the page.");
+        throw e;
+      }
+    },
+    "Carried forward. Check it against this scheme's rules, then submit it as V1.0.",
+  ),
 );
 
 /**

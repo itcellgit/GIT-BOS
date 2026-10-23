@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useParams } from "react-router";
 import { formatCredits, formatLabels, totalCredits } from "@acp/shared/domain/schemes/rules";
 import { schemeStatusLabels } from "@acp/shared/labels";
 import { formats } from "@acp/shared/schemas/config";
 import { useApiQuery } from "@/hooks/use-api";
 import {
+  copyCourseList,
   deleteElectiveGroup,
   deletePso,
   deleteSchemeCourse,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/actions";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { CourseImportDialog } from "@/components/forms/course-import-dialog";
+import { SyllabusBookMenu } from "@/components/forms/syllabus-book-menu";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
@@ -23,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import { CalendarRange, FileSpreadsheet, Pencil, Plus, Shuffle, Target, Trash2 } from "lucide-react";
+import { CalendarRange, Copy, FileSpreadsheet, Pencil, Plus, Shuffle, Target, Trash2 } from "lucide-react";
 const groupFields = [
   { name: "semester", label: "Semester", type: "number", width: "third" },
   { name: "code", label: "Group code", type: "text", width: "third", placeholder: "1BCSL308x" },
@@ -43,7 +46,18 @@ export function CourseListPage() {
   return <QueryState query={query}>{(data) => <CourseList {...data} />}</QueryState>;
 }
 
-function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, departments, editable, courseRules }) {
+function CourseList({
+  scheme,
+  programme,
+  courses: rows,
+  electiveGroups,
+  psos,
+  departments,
+  editable,
+  courseRules,
+  copySources,
+}) {
+  const [copyResult, setCopyResult] = useState(null);
   const rowsWithIssues = rows.filter((r) => r.issues.length > 0).length;
   const semesters = [...new Set([...rows.map((r) => r.semester), ...electiveGroups.map((g) => g.semester)])].sort(
     (a, b) => a - b,
@@ -113,12 +127,50 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
         }
         actions={
           <>
+            {semesters.length > 0 && (
+              <SyllabusBookMenu
+                basePath={`/schemes/${scheme.id}/programmes/${programme.id}`}
+                fileStem={`${programme.code}_${scheme.code}`}
+                semesters={semesters}
+              />
+            )}
             <Button asChild variant="outline">
               <a href={workbook}>
                 <FileSpreadsheet />
                 Download Excel
               </a>
             </Button>
+            {editable && copySources.length > 0 && (
+              <EntityFormDialog
+                schema="copyCourseList"
+                title="Copy the course list from another scheme"
+                description={`Courses are copied into ${scheme.name} with their categories matched by code and checked against this scheme's rules. Courses already in the list are left alone; elective groups come along, and PSOs when this programme has none yet.`}
+                fields={[
+                  {
+                    name: "fromSchemeId",
+                    label: "Copy from",
+                    type: "select",
+                    options: copySources.map((s) => ({ value: s.id, label: `${s.name} (${s.courseCount} courses)` })),
+                  },
+                  { name: "withAssignments", label: "Also copy the faculty assigned to each course", type: "checkbox" },
+                ]}
+                defaultValues={{
+                  fromSchemeId:
+                    (scheme.clonedFromId && copySources.find((s) => s.id === scheme.clonedFromId)?.id) ??
+                    copySources[0].id,
+                  withAssignments: true,
+                }}
+                action={copyCourseList.bind(null, scheme.id, programme.id)}
+                onSuccess={(result) => setCopyResult(result.data)}
+                submitLabel="Copy courses"
+                trigger={
+                  <Button variant="outline">
+                    <Copy />
+                    Copy from a scheme
+                  </Button>
+                }
+              />
+            )}
             {editable && (
               <>
                 <CourseImportDialog
@@ -180,7 +232,36 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
         </Alert>
       )}
 
-      {rows.length === 0 && <EmptyState>No courses yet. Add them one by one, or import an Excel workbook.</EmptyState>}
+      {copyResult && (
+        <Alert className="mb-6">
+          <Copy />
+          <AlertTitle>
+            {copyResult.copied.length} course(s) copied
+            {copyResult.assignments > 0 && `, ${copyResult.assignments} faculty assignment(s)`}
+            {copyResult.groups > 0 && `, ${copyResult.groups} elective group(s)`}
+            {copyResult.psos > 0 && `, ${copyResult.psos} PSO(s)`}
+          </AlertTitle>
+          {copyResult.skipped.length > 0 && (
+            <AlertDescription>
+              <p>Not copied — add or correct these by hand:</p>
+              <ul className="list-disc pl-5">
+                {copyResult.skipped.map((s) => (
+                  <li key={s.code}>
+                    <span className="font-medium">{s.code}</span>: {s.reason}
+                  </li>
+                ))}
+              </ul>
+            </AlertDescription>
+          )}
+        </Alert>
+      )}
+
+      {rows.length === 0 && (
+        <EmptyState>
+          No courses yet. Add them one by one, import an Excel workbook
+          {copySources.length > 0 && ", or copy the list from an earlier scheme"}.
+        </EmptyState>
+      )}
 
       <div className="space-y-8">
         {semesters.map((sem) => (

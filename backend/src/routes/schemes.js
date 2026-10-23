@@ -2,6 +2,8 @@
 // Bloom levels and standard text (README §5).
 import { Router } from "express";
 import { can } from "@acp/shared/domain/auth/permissions";
+import { amendmentScope, amendmentSummary, schemeRulesChanged } from "@acp/shared/domain/schemes/amendments";
+import { formatCredits } from "@acp/shared/domain/schemes/rules";
 import {
   bloomLevelSchema,
   categorySchema,
@@ -15,6 +17,7 @@ import { assertPermission } from "../auth/session.js";
 import { NotFoundError, UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
 import { db } from "../infra/db.js";
+import { recheckAmendment, recordAmendment } from "../services/amendments.js";
 import { writeAudit } from "../services/audit.js";
 import {
   assertSchemeEditable,
@@ -50,9 +53,31 @@ schemesRouter.get(
     const scheme = await getSchemeConfig(req.params.id);
     if (!scheme) throw new NotFoundError("Scheme not found.");
     const canConfigure = can(user, "scheme.configure");
+    const [programmes, amendments] = await Promise.all([
+      listSchemeProgrammes(scheme.id, user),
+      db.schemeAmendment.findMany({
+        where: { schemeId: scheme.id },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        include: {
+          createdBy: { select: { name: true } },
+          _count: { select: { flags: { where: { resolvedAt: null } } } },
+        },
+      }),
+    ]);
     return {
       scheme,
-      programmes: await listSchemeProgrammes(scheme.id, user),
+      programmes,
+      // Layer-1 changes made after publishing, newest first (README §5).
+      amendments: amendments.map((a) => ({
+        id: a.id,
+        summary: a.summary,
+        action: a.action,
+        at: a.createdAt,
+        by: a.createdBy?.name ?? null,
+        affectedCount: a.affectedCount,
+        openCount: a._count.flags,
+      })),
       canConfigure,
       editable: canConfigure && scheme.status !== "RETIRED",
     };
@@ -95,13 +120,25 @@ schemesRouter.put(
       const schemeId = req.params.id;
       const actor = assertPermission(req, "scheme.configure");
       await assertSchemeEditable(schemeId);
-      await db.$transaction(async (tx) => {
+      const before = await db.scheme.findUnique({ where: { id: schemeId } });
+      const amendmentId = await db.$transaction(async (tx) => {
         await tx.scheme.update({ where: { id: schemeId }, data });
         await writeAudit(
           { actorId: actor.id, action: "scheme.update", entityType: "Scheme", entityId: schemeId, details: data },
           tx,
         );
+        // Weeks or hours per credit changed on a scheme in use: every syllabus needs a look (README §5).
+        if (before.status !== "PUBLISHED" || !schemeRulesChanged(before, data)) return null;
+        return recordAmendment(tx, {
+          schemeId,
+          actorId: actor.id,
+          action: "scheme.update",
+          summary: amendmentSummary("scheme.update", { before, after: data }),
+          scope: amendmentScope("scheme.update"),
+          details: data,
+        });
       });
+      if (amendmentId) recheckLater(amendmentId);
     },
     "Scheme updated",
   ),
@@ -180,18 +217,39 @@ schemesRouter.delete(
 
 // --- Helpers for scheme-owned records ------------------------------------------------
 
-/** Permission + editable-state check, then the write and its audit entry in one transaction. */
-async function layer1Change(req, action, entityType, details, write) {
+/**
+ * Permission + editable-state check, then the write and its audit entry in one transaction. On a
+ * published scheme the change is also an amendment (README §5): `change` names what changed
+ * ({ categoryId, format, code, kind, title, pattern }), which decides the syllabi flagged "Needs revision".
+ */
+async function layer1Change(req, action, entityType, details, write, change = {}) {
   const schemeId = req.params.id;
   const actor = assertPermission(req, "scheme.configure");
-  await assertSchemeEditable(schemeId);
-  await db.$transaction(async (tx) => {
+  const scheme = await assertSchemeEditable(schemeId);
+  const amendmentId = await db.$transaction(async (tx) => {
     const row = await write(tx);
     await writeAudit(
       { actorId: actor.id, action, entityType, entityId: row?.id ?? null, details: { schemeId, ...details } },
       tx,
     );
+    if (scheme.status !== "PUBLISHED") return null;
+    return recordAmendment(tx, {
+      schemeId,
+      actorId: actor.id,
+      action,
+      summary: amendmentSummary(action, change),
+      scope: amendmentScope(action, change),
+      details: { entityType, entityId: row?.id ?? null },
+    });
   });
+  if (amendmentId) recheckLater(amendmentId);
+}
+
+/** Re-runs the checks of the flagged syllabi after the response, so the change itself stays quick. */
+function recheckLater(amendmentId) {
+  setImmediate(() =>
+    recheckAmendment(amendmentId).catch((e) => console.warn("[amendment] re-check failed:", e.message)),
+  );
 }
 
 /** Confirms a child record belongs to the scheme in the URL (prevents cross-scheme edits). */
@@ -207,10 +265,16 @@ const saveCategory = handle(
   async (data, req) => {
     const categoryId = req.params.categoryId ?? null;
     if (categoryId) owned(await db.courseCategory.findUnique({ where: { id: categoryId } }), req.params.id);
-    await layer1Change(req, categoryId ? "category.update" : "category.create", "CourseCategory", data, (tx) =>
-      categoryId
-        ? tx.courseCategory.update({ where: { id: categoryId }, data })
-        : tx.courseCategory.create({ data: { ...data, schemeId: req.params.id } }),
+    await layer1Change(
+      req,
+      categoryId ? "category.update" : "category.create",
+      "CourseCategory",
+      data,
+      (tx) =>
+        categoryId
+          ? tx.courseCategory.update({ where: { id: categoryId }, data })
+          : tx.courseCategory.create({ data: { ...data, schemeId: req.params.id } }),
+      { categoryId, code: data.code },
     );
   },
   "Category saved",
@@ -236,8 +300,13 @@ schemesRouter.delete(
           `${category.code} is used by ${category._count.schemeCourses} course(s) and cannot be deleted.`,
         );
       }
-      await layer1Change(req, "category.delete", "CourseCategory", { code: category.code }, (tx) =>
-        tx.courseCategory.delete({ where: { id: cid } }),
+      await layer1Change(
+        req,
+        "category.delete",
+        "CourseCategory",
+        { code: category.code },
+        (tx) => tx.courseCategory.delete({ where: { id: cid } }),
+        { categoryId: cid, code: category.code },
       );
     },
     "Category deleted",
@@ -250,9 +319,14 @@ schemesRouter.post(
     creditPatternSchema,
     async (data, req) => {
       const categoryId = req.params.categoryId;
-      owned(await db.courseCategory.findUnique({ where: { id: categoryId } }), req.params.id);
-      await layer1Change(req, "creditPattern.create", "CreditPattern", { categoryId, ...data }, (tx) =>
-        tx.creditPattern.create({ data: { ...data, categoryId } }),
+      const category = owned(await db.courseCategory.findUnique({ where: { id: categoryId } }), req.params.id);
+      await layer1Change(
+        req,
+        "creditPattern.create",
+        "CreditPattern",
+        { categoryId, ...data },
+        (tx) => tx.creditPattern.create({ data: { ...data, categoryId } }),
+        { categoryId, code: category.code, pattern: formatCredits(data) },
       );
     },
     "Credit pattern added",
@@ -267,8 +341,13 @@ schemesRouter.delete(
       const pid = req.params.patternId;
       const pattern = await db.creditPattern.findUnique({ where: { id: pid }, include: { category: true } });
       if (!pattern || pattern.category.schemeId !== req.params.id) throw new NotFoundError("Credit pattern not found.");
-      await layer1Change(req, "creditPattern.delete", "CreditPattern", { categoryId: pattern.categoryId }, (tx) =>
-        tx.creditPattern.delete({ where: { id: pid } }),
+      await layer1Change(
+        req,
+        "creditPattern.delete",
+        "CreditPattern",
+        { categoryId: pattern.categoryId },
+        (tx) => tx.creditPattern.delete({ where: { id: pid } }),
+        { categoryId: pattern.categoryId, code: pattern.category.code, pattern: formatCredits(pattern) },
       );
     },
     "Credit pattern removed",
@@ -283,9 +362,14 @@ schemesRouter.put(
     formatConfigSchema,
     async (data, req) => {
       const formatId = req.params.formatId;
-      owned(await db.formatConfig.findUnique({ where: { id: formatId } }), req.params.id);
-      await layer1Change(req, "format.update", "FormatConfig", data, (tx) =>
-        tx.formatConfig.update({ where: { id: formatId }, data }),
+      const format = owned(await db.formatConfig.findUnique({ where: { id: formatId } }), req.params.id);
+      await layer1Change(
+        req,
+        "format.update",
+        "FormatConfig",
+        data,
+        (tx) => tx.formatConfig.update({ where: { id: formatId }, data }),
+        { format: format.format },
       );
     },
     "Format settings saved",
@@ -298,11 +382,17 @@ const saveOutcomeItem = handle(
   outcomeItemSchema,
   async (data, req) => {
     const itemId = req.params.itemId ?? null;
-    if (itemId) owned(await db.outcomeItem.findUnique({ where: { id: itemId } }), req.params.id);
-    await layer1Change(req, itemId ? "outcome.update" : "outcome.create", "OutcomeItem", data, (tx) =>
-      itemId
-        ? tx.outcomeItem.update({ where: { id: itemId }, data })
-        : tx.outcomeItem.create({ data: { ...data, schemeId: req.params.id } }),
+    const item = itemId ? owned(await db.outcomeItem.findUnique({ where: { id: itemId } }), req.params.id) : null;
+    await layer1Change(
+      req,
+      itemId ? "outcome.update" : "outcome.create",
+      "OutcomeItem",
+      data,
+      (tx) =>
+        itemId
+          ? tx.outcomeItem.update({ where: { id: itemId }, data })
+          : tx.outcomeItem.create({ data: { ...data, schemeId: req.params.id } }),
+      { kind: data.kind ?? item?.kind, code: data.code ?? item?.code },
     );
   },
   "Saved",
@@ -317,8 +407,13 @@ schemesRouter.delete(
     async (_data, req) => {
       const oid = req.params.itemId;
       const item = owned(await db.outcomeItem.findUnique({ where: { id: oid } }), req.params.id);
-      await layer1Change(req, "outcome.delete", "OutcomeItem", { code: item.code }, (tx) =>
-        tx.outcomeItem.delete({ where: { id: oid } }),
+      await layer1Change(
+        req,
+        "outcome.delete",
+        "OutcomeItem",
+        { code: item.code },
+        (tx) => tx.outcomeItem.delete({ where: { id: oid } }),
+        { kind: item.kind, code: item.code },
       );
     },
     "Deleted",
@@ -333,9 +428,14 @@ schemesRouter.put(
     bloomLevelSchema,
     async (data, req) => {
       const levelId = req.params.levelId;
-      owned(await db.bloomLevel.findUnique({ where: { id: levelId } }), req.params.id);
-      await layer1Change(req, "bloom.update", "BloomLevel", data, (tx) =>
-        tx.bloomLevel.update({ where: { id: levelId }, data }),
+      const level = owned(await db.bloomLevel.findUnique({ where: { id: levelId } }), req.params.id);
+      await layer1Change(
+        req,
+        "bloom.update",
+        "BloomLevel",
+        data,
+        (tx) => tx.bloomLevel.update({ where: { id: levelId }, data }),
+        { code: `L${level.level} ${level.name}` },
       );
     },
     "Bloom level saved",
@@ -358,6 +458,7 @@ const saveTextBlock = handle(
         blockId
           ? tx.textBlock.update({ where: { id: blockId }, data })
           : tx.textBlock.create({ data: { ...data, schemeId: req.params.id } }),
+      { title: data.title },
     );
   },
   "Text block saved",
@@ -372,8 +473,13 @@ schemesRouter.delete(
     async (_data, req) => {
       const bid = req.params.blockId;
       const block = owned(await db.textBlock.findUnique({ where: { id: bid } }), req.params.id);
-      await layer1Change(req, "textBlock.delete", "TextBlock", { title: block.title }, (tx) =>
-        tx.textBlock.delete({ where: { id: bid } }),
+      await layer1Change(
+        req,
+        "textBlock.delete",
+        "TextBlock",
+        { title: block.title },
+        (tx) => tx.textBlock.delete({ where: { id: bid } }),
+        { title: block.title },
       );
     },
     "Text block deleted",

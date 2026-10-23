@@ -217,8 +217,19 @@ export const courseAssignmentSchema = z.object({
   userId: z.string().min(1, "Choose a faculty member"),
   role: z.enum(["COORDINATOR", "CO_AUTHOR"]),
 });
+/** Phase 4: copy a programme's course list from an earlier scheme into a cloned one. */
+export const copyCourseListSchema = z.object({
+  fromSchemeId: z.string().min(1, "Choose the scheme to copy from"),
+  withAssignments: z.boolean().default(true),
+});
+/** Phase 4: start a syllabus from a version of an earlier scheme's syllabus. */
+export const carryForwardSchema = z.object({
+  versionId: z.string().min(1, "Choose the syllabus to start from"),
+});
 /** Registry used by the generic form dialog (client) to look up a schema by name. */
 export const formSchemas = {
+  copyCourseList: copyCourseListSchema,
+  carryForward: carryForwardSchema,
   department: departmentSchema,
   programme: programmeSchema,
   user: userSchema,

@@ -49,6 +49,8 @@ export const savePso = (schemeId, programmeId, psoId, values) =>
 export const deletePso = (schemeId, programmeId, psoId) => api.delete(`${list(schemeId, programmeId)}/psos/${psoId}`);
 export const importCourses = (schemeId, programmeId, formData) =>
   api.post(`${list(schemeId, programmeId)}/import`, formData);
+export const copyCourseList = (schemeId, programmeId, values) =>
+  api.post(`${list(schemeId, programmeId)}/copy`, values);
 export const workbookUrl = (schemeId, programmeId) => `/api${list(schemeId, programmeId)}/workbook`;
 
 // --- Departments ------------------------------------------------------------------------
@@ -76,6 +78,8 @@ export const deleteReviewInput = (path, inputId) => api.delete(`${path}/inputs/$
 export const saveActionTaken = (path, inputId, values) => api.put(`${path}/inputs/${inputId}/action`, values);
 export const issueExpertLink = (path, values) => api.post(`${path}/expert-links`, values);
 export const revokeExpertLink = (path, linkId) => api.post(`${path}/expert-links/${linkId}/revoke`);
+export const carryForward = (path, values) => api.post(`${path}/carry-forward`, values);
+export const resolveRevision = (path, values) => api.post(`${path}/revision-flags/resolve`, values);
 
 // --- Expert review page (public; the link's token is the credential) -----------------------------------
 export const addExpertComment = (token, values) => api.post(`/expert/${token}/comments`, values);

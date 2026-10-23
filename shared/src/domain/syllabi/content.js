@@ -12,7 +12,8 @@
 //   textBooks, referenceBooks: { authors, title, publisher, edition, year }[]
 //   eResources: { title, url }[]
 //   termWork, selfLearning: { activity, hours }[]
-//   outcomes: { statement, verb, level, pos[], psos: { [programmeCode]: string[] }, wks[], sdgs[] }[]
+//   outcomes: { statement, verb, level, units[], pos[], psos: { [programmeCode]: string[] }, wks[], sdgs[] }[]
+//             units: the unit numbers (1-based) the CO is based on, for the coverage check (README §9)
 // }
 // PSO ticks are kept per programme because one syllabus serves every programme that lists the course (D13).
 
@@ -21,7 +22,16 @@ export const emptyEResource = () => ({ title: "", url: "" });
 export const emptyActivity = () => ({ activity: "", hours: null });
 export const emptyUnit = () => ({ title: "", content: "", hours: null });
 export const emptyExperiment = () => ({ title: "", hours: null });
-export const emptyOutcome = () => ({ statement: "", verb: "", level: null, pos: [], psos: {}, wks: [], sdgs: [] });
+export const emptyOutcome = () => ({
+  statement: "",
+  verb: "",
+  level: null,
+  units: [],
+  pos: [],
+  psos: {},
+  wks: [],
+  sdgs: [],
+});
 
 const text = (v) => (typeof v === "string" ? v : "");
 const hours = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
@@ -93,6 +103,9 @@ function outcome(o) {
     statement: text(o.statement),
     verb: text(o.verb),
     level: Number.isInteger(o.level) ? o.level : null,
+    units: Array.isArray(o.units)
+      ? [...new Set(o.units.filter((n) => Number.isInteger(n) && n > 0))].sort((a, b) => a - b)
+      : [],
     pos: codes(o.pos),
     psos,
     wks: codes(o.wks),

@@ -69,7 +69,11 @@ export const expertCommentSchema = z.object({
   inputText: requiredText("The comment", 4000),
 });
 
+/** BoS Coordinator: a scheme amendment needs no change in this syllabus (README §5, Phase 4). */
+export const resolveRevisionSchema = z.object({ reason });
+
 export const reviewFormSchemas = {
+  resolveRevision: resolveRevisionSchema,
   expertLink: expertLinkSchema,
   expertComment: expertCommentSchema,
   commitVersion: commitVersionSchema,

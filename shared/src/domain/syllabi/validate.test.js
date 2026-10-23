@@ -33,10 +33,11 @@ function completeContent() {
     ["Apply stacks and queues to solve problems", "apply", 3],
     ["Implement trees and their traversals", "implement", 3],
     ["Analyse graph algorithms for efficiency", "analyse", 4],
-  ].map(([statement, verb, level]) => ({
+  ].map(([statement, verb, level], i) => ({
     statement,
     verb,
     level,
+    units: i === 3 ? [4, 5] : [i + 1],
     pos: ["PO1"],
     psos: { "BE-CSE": ["PSO1"] },
     wks: [],
@@ -50,6 +51,17 @@ const messages = (issues, severity) => issues.filter((i) => i.severity === sever
 describe("Theory syllabus validation (README §9)", () => {
   it("passes a complete syllabus", () => {
     expect(validateSyllabus(completeContent(), ctx)).toEqual([]);
+  });
+
+  it("warns about units no CO covers and COs without units (coverage)", () => {
+    const c = completeContent();
+    c.outcomes[3].units = [4];
+    c.outcomes[0].units = [];
+    expect(messages(validateSyllabus(c, ctx), "warning")).toEqual([
+      "Units I and V are not covered by any CO.",
+      "CO1: tick the units it is based on.",
+    ]);
+    expect(messages(validateSyllabus(c, ctx), "error")).toEqual([]);
   });
 
   it("reports an empty syllabus with errors in every section, but no crash", () => {

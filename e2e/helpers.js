@@ -36,6 +36,8 @@ export async function signIn(page, email) {
   await page.getByLabel("Sign-in code").fill(code);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // Wait for the redirect to the home page, so a test's next navigation is not overtaken by it.
+  await expect(page.getByRole("heading", { name: /^Welcome/ })).toBeVisible();
 }
 /** Fills in the password form on /login and submits it (does not wait for the result). */
 export async function submitPassword(page, email, password) {

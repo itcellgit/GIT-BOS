@@ -5,6 +5,7 @@ import { pendingInputs, versionLabel, workflowBlocker } from "@acp/shared/domain
 import { emptySyllabusContent, normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
 import { summarizeIssues, validateSyllabus, validationContext } from "@acp/shared/domain/syllabi/validate";
 import { assertSignedIn } from "../auth/session.js";
+import { carryForwardSources } from "./carry-forward.js";
 import { NotFoundError, PermissionError } from "../errors.js";
 import { db } from "../infra/db.js";
 
@@ -40,6 +41,12 @@ export async function loadSyllabusContext(user, schemeId, courseId) {
       include: {
         updatedBy: { select: { name: true } },
         officialVersion: { select: { id: true, label: true, createdAt: true } },
+        carriedFrom: {
+          select: {
+            label: true,
+            syllabus: { select: { scheme: { select: { name: true } }, course: { select: { code: true } } } },
+          },
+        },
       },
     }),
   ]);
@@ -125,6 +132,24 @@ async function officialCreatedAt(syllabus, tx) {
   return v?.createdAt ?? null;
 }
 
+/** Open flags of a syllabus with what changed, newest first (for the editor and review pages). */
+export async function openRevisionFlags(syllabusId) {
+  if (!syllabusId) return [];
+  const flags = await db.syllabusRevisionFlag.findMany({
+    where: { syllabusId, resolvedAt: null },
+    orderBy: { createdAt: "desc" },
+    include: { amendment: { include: { createdBy: { select: { name: true } } } } },
+  });
+  return flags.map((f) => ({
+    id: f.id,
+    summary: f.amendment.summary,
+    at: f.amendment.createdAt,
+    by: f.amendment.createdBy?.name ?? null,
+    errorCount: f.errorCount,
+    warningCount: f.warningCount,
+  }));
+}
+
 /** The workflow actions with the reason each one is blocked (null = allowed). */
 export function workflowBlockers(state) {
   return Object.fromEntries(
@@ -143,7 +168,8 @@ export async function loadEditorData(req) {
 /** loadEditorData for an already loaded context. */
 export async function buildEditorData(ctx) {
   const { user, scheme, course, rows, assignments, syllabus, format, resource, lockedReason } = ctx;
-  const [institution, outcomes, bloomLevels, textBlocks] = await Promise.all([
+  const canEdit = !lockedReason && can(user, "syllabus.edit", resource);
+  const [institution, outcomes, bloomLevels, textBlocks, revisionFlags, carrySources] = await Promise.all([
     db.institutionSettings.findUnique({ where: { id: 1 } }),
     db.outcomeItem.findMany({
       where: {
@@ -159,6 +185,9 @@ export async function buildEditorData(ctx) {
           orderBy: [{ kind: "asc" }, { sortOrder: "asc" }],
         })
       : [],
+    openRevisionFlags(syllabus?.id),
+    // A syllabus not started yet can begin from an earlier scheme's syllabus (Phase 4).
+    !syllabus && canEdit ? carryForwardSources(scheme, course) : [],
   ]);
   const outcomesOf = (kind) => outcomes.filter((o) => o.kind === kind);
 
@@ -210,10 +239,13 @@ export async function buildEditorData(ctx) {
     bloomLevels,
     textBlocks,
     assignments: assignments.map((a) => ({ id: a.id, role: a.role, name: a.user.name, userId: a.user.id })),
-    canEdit: !lockedReason && can(user, "syllabus.edit", resource),
+    canEdit,
     // Reviewing continues while the working copy is locked (approved), so it has its own flag.
     canReview: scheme.status === "PUBLISHED" && !!syllabus && can(user, "syllabus.review", resource),
     lockedReason,
+    // Scheme amendments since the last version that may need a change here (README §5).
+    revisionFlags,
+    carryForward: { sources: carrySources },
     syllabus: {
       id: syllabus?.id ?? null,
       status: syllabus?.status ?? "DRAFT",
@@ -222,6 +254,13 @@ export async function buildEditorData(ctx) {
       updatedBy: syllabus?.updatedBy?.name ?? null,
       officialVersion: syllabus?.officialVersion
         ? { id: syllabus.officialVersion.id, label: syllabus.officialVersion.label }
+        : null,
+      carriedFrom: syllabus?.carriedFrom
+        ? {
+            label: syllabus.carriedFrom.label,
+            schemeName: syllabus.carriedFrom.syllabus.scheme.name,
+            courseCode: syllabus.carriedFrom.syllabus.course.code,
+          }
         : null,
       content: format
         ? syllabus

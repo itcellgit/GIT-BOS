@@ -82,6 +82,15 @@ test("the editor checks the syllabus against the scheme rules as faculty type", 
   await expect(checks.getByText("CO1: “design” is a Create verb, but the level is Apply.")).toBeVisible();
   await page.locator("#co-0-verb").fill("apply");
   await expect(checks.getByText(/CO1: “design”/)).toHaveCount(0);
+
+  // Coverage (warning): ticking the units a CO is based on clears "not covered" for that unit.
+  const unit2 = page.getByLabel("CO1 is based on unit 2");
+  if (await unit2.isChecked()) await unit2.uncheck();
+  const notCovered = checks.getByText(/not covered by any CO/);
+  await expect(notCovered).toHaveText(/(^|[^I])II([^I]|$)/);
+  await unit2.check();
+  await expect(notCovered).not.toHaveText(/(^|[^I])II([^I]|$)/);
+  await unit2.uncheck();
   await saved(page);
 });
 

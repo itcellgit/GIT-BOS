@@ -22,6 +22,7 @@ import {
   closeStageSchema,
   commitVersionSchema,
   expertLinkSchema,
+  resolveRevisionSchema,
   reviewInputSchema,
   unlockSchema,
 } from "@acp/shared/schemas/review";
@@ -29,11 +30,18 @@ import { ConflictError, NotFoundError, PermissionError, UserError } from "../err
 import { handle, zodFieldErrors } from "../http/handler.js";
 import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
+import { resolveRevisionFlags } from "../services/amendments.js";
 import { writeAudit } from "../services/audit.js";
 import { frozenSyllabusPdf, isApprovedVersion } from "../services/documents.js";
 import { expertLinkUrl, linkStatus, newToken } from "../services/expert-links.js";
 import { sendMail } from "../infra/mail.js";
-import { buildEditorData, loadEditorData, loadSyllabusContext, workflowBlockers } from "../services/syllabi.js";
+import {
+  buildEditorData,
+  loadEditorData,
+  loadSyllabusContext,
+  openRevisionFlags,
+  workflowBlockers,
+} from "../services/syllabi.js";
 
 export const reviewsRouter = Router({ mergeParams: true });
 
@@ -149,6 +157,7 @@ async function reviewData(req) {
     // Responding to inputs is part of editing the working copy (README §4).
     canRespond: data.canEdit && can(user, "syllabus.edit", resource),
     canEdit: data.canEdit,
+    revisionFlags: data.revisionFlags,
     sectionRefs: sectionRefOptions(data.syllabus.content),
     versions: versions.map((v) => ({
       ...v,
@@ -214,9 +223,12 @@ reviewsRouter.get(
 
 // --- Workflow changes ---------------------------------------------------------------------------------
 
-/** Freezes the saved working copy as a new version. */
-function createVersion(tx, { syllabus, version, stage, source, reason, userId }) {
-  return tx.syllabusVersion.create({
+/**
+ * Freezes the saved working copy as a new version. A new version passed the checks with the current
+ * scheme rules, so it also resolves any "Needs revision" flag left by a scheme amendment (README §5).
+ */
+async function createVersion(tx, { syllabus, version, stage, source, reason, userId }) {
+  const v = await tx.syllabusVersion.create({
     data: {
       syllabusId: syllabus.id,
       major: version.major,
@@ -230,6 +242,8 @@ function createVersion(tx, { syllabus, version, stage, source, reason, userId })
       createdById: userId,
     },
   });
+  await resolveRevisionFlags(tx, syllabus.id, { userId, resolution: `Saved as ${v.label}` });
+  return v;
 }
 
 /**
@@ -482,6 +496,30 @@ reviewsRouter.post(
     res.locals.message = `Approved: ${label} is the official syllabus`;
     return { label };
   }),
+);
+
+/**
+ * "Needs revision" after a scheme amendment, when the syllabus needs no change (BoS Coordinator).
+ * Otherwise the next version resolves the flags (createVersion).
+ */
+reviewsRouter.post(
+  "/revision-flags/resolve",
+  handle(
+    resolveRevisionSchema,
+    async ({ reason }, req) => {
+      const ctx = await loadFor(req, "review");
+      const open = await openRevisionFlags(ctx.syllabus.id);
+      if (open.length === 0) throw new UserError("This syllabus is not flagged for revision.");
+      await db.$transaction(async (tx) => {
+        await resolveRevisionFlags(tx, ctx.syllabus.id, {
+          userId: ctx.user.id,
+          resolution: `No change needed: ${reason}`,
+        });
+        await audit(tx, ctx, "syllabus.revisionResolved", { amendments: open.map((f) => f.summary), reason });
+      });
+    },
+    "Marked as reviewed: no change needed",
+  ),
 );
 
 // --- Versions ------------------------------------------------------------------------------------------

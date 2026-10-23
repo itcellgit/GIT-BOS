@@ -6,6 +6,7 @@ import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
+import { AmendmentsSection } from "@/components/schemes/amendments-section";
 import { BloomSection } from "@/components/schemes/bloom-section";
 import { CategoriesSection } from "@/components/schemes/categories-section";
 import { FormatsSection } from "@/components/schemes/formats-section";
@@ -23,6 +24,7 @@ import {
   CircleCheck,
   FileText,
   GraduationCap,
+  History,
   LayoutTemplate,
   Pencil,
   Tags,
@@ -36,7 +38,7 @@ export function SchemePage() {
 
   return (
     <QueryState query={query}>
-      {({ scheme, programmes, canConfigure, editable }) => (
+      {({ scheme, programmes, amendments, canConfigure, editable }) => (
         <>
           <PageHeader
             back={{ href: "/schemes", label: "All schemes" }}
@@ -144,9 +146,9 @@ export function SchemePage() {
             <Alert className="mb-6">
               <AlertTitle>This scheme is in use</AlertTitle>
               <AlertDescription>
-                Changes to rules (credit patterns, marks, weeks) are checked against every department&apos;s course list
-                straight away, and any course that no longer fits is flagged on that list. Formal amendments come in
-                Phase 4.
+                Changes to rules (categories, credit patterns, formats, outcome lists, Bloom levels, weeks) are recorded
+                as amendments. Every syllabus a change can affect is flagged “Needs revision” and its checks are re-run;
+                course lists that no longer fit are flagged on the list.
               </AlertDescription>
             </Alert>
           )}
@@ -177,6 +179,13 @@ export function SchemePage() {
                 <GraduationCap />
                 Programmes
               </TabsTrigger>
+              {scheme.status !== "DRAFT" && (
+                <TabsTrigger value="amendments">
+                  <History />
+                  Amendments
+                  {amendments.length > 0 && <span className="tabular-nums">({amendments.length})</span>}
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="categories" className="pt-4">
               <CategoriesSection scheme={scheme} editable={editable} />
@@ -195,6 +204,9 @@ export function SchemePage() {
             </TabsContent>
             <TabsContent value="programmes" className="pt-4">
               <ProgrammesSection scheme={scheme} programmes={programmes} />
+            </TabsContent>
+            <TabsContent value="amendments" className="pt-4">
+              <AmendmentsSection scheme={scheme} amendments={amendments} />
             </TabsContent>
           </Tabs>
         </>

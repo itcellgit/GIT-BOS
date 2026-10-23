@@ -5,6 +5,7 @@ import { AccountPage } from "@/pages/account-page";
 import { AdminDepartmentsPage } from "@/pages/admin-departments-page";
 import { AdminUsersPage } from "@/pages/admin-users-page";
 import { CourseListPage } from "@/pages/course-list-page";
+import { DashboardPage } from "@/pages/dashboard-page";
 import { ExpertReviewPage } from "@/pages/expert-review-page";
 import { DepartmentPage } from "@/pages/department-page";
 import { HomePage } from "@/pages/home-page";
@@ -31,6 +32,7 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route element={<PortalLayout />}>
           <Route index element={<HomePage />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path="schemes" element={<SchemesPage />} />
           <Route path="schemes/:schemeId" element={<SchemePage />} />
           <Route path="schemes/:schemeId/programmes/:programmeId" element={<CourseListPage />} />

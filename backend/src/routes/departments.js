@@ -55,7 +55,15 @@ departmentsRouter.get(
       }),
       db.syllabus.findMany({
         where: { course: { owningDepartmentId: department.id }, scheme: { status: "PUBLISHED" } },
-        select: { schemeId: true, courseId: true, status: true, stage: true, majorVersion: true, minorVersion: true },
+        select: {
+          schemeId: true,
+          courseId: true,
+          status: true,
+          stage: true,
+          majorVersion: true,
+          minorVersion: true,
+          _count: { select: { revisionFlags: { where: { resolvedAt: null } } } },
+        },
       }),
       db.reviewMeeting.findMany({
         where: { departmentId: department.id },
@@ -119,6 +127,7 @@ function syllabusSummary(y) {
     status: y.status,
     stage: y.stage,
     label: y.majorVersion > 0 ? versionLabel(y.majorVersion, y.minorVersion) : null,
+    needsRevision: y._count.revisionFlags > 0, // a scheme amendment may affect it (README §5)
   };
 }
 

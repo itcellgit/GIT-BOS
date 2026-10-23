@@ -57,6 +57,11 @@ function SyllabusStatus({ syllabus }) {
   return (
     <div className="space-y-0.5">
       <SyllabusStatusBadge status={syllabus.status} />
+      {syllabus.needsRevision && (
+        <Badge variant="warning" title="A scheme amendment may affect this syllabus">
+          Needs revision
+        </Badge>
+      )}
       {syllabus.label && (
         <div className="text-xs text-muted-foreground">
           {syllabus.label}

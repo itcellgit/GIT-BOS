@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { expect, test } from "@playwright/test";
+import { PDFDocument, PDFName } from "pdf-lib";
 import { signIn, unique } from "./helpers.js";
 async function openCseCourseList(page) {
   await page.goto("/departments/CSE");
@@ -119,4 +120,27 @@ test("HoD can view the course list but not change it", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Add course" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Import from Excel" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Download Excel" })).toBeVisible();
+});
+
+test("BoS Coordinator downloads the compiled syllabus book of a semester", async ({ page }) => {
+  // Phase 4 (README §8): cover, scheme table, contents and the approved syllabi in one PDF.
+  await signIn(page, "bos.cse@example.edu");
+  const department = (await (await page.request.get("/api/departments/CSE")).json()).data;
+  const approved = department.courses.find((c) => c.syllabus?.status === "APPROVED");
+  test.skip(!approved, "needs an approved syllabus (run review-workflow.spec.js first)");
+  await page.goto(`/schemes/${approved.schemeId}/programmes/${department.programmes[0].id}`);
+  await page.getByRole("button", { name: "Syllabus book" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: `Semester ${approved.semester}` }).click();
+  const file = await download;
+  expect(file.suggestedFilename().endsWith(`_sem${approved.semester}_syllabus_book.pdf`)).toBe(true);
+  const pdf = await (
+    await page.request.get(
+      `/api/schemes/${approved.schemeId}/programmes/${department.programmes[0].id}/book/pdf?semester=${approved.semester}`,
+    )
+  ).body();
+  // The front matter comes first, then the syllabi; the contents are bookmarked.
+  const book = await PDFDocument.load(pdf);
+  expect(book.getPageCount()).toBeGreaterThan(3);
+  expect(book.catalog.lookup(PDFName.of("Outlines"))).toBeTruthy();
 });

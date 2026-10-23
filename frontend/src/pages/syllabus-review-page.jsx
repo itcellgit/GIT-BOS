@@ -42,6 +42,7 @@ import { QueryState } from "@/components/layout/query-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RevisionAlert } from "@/components/syllabus/revision-alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,6 +73,7 @@ function Review({ path, data }) {
           </span>
         }
       />
+      <RevisionAlert path={path} flags={data.revisionFlags} canReview={data.canReview} />
       <Tabs defaultValue="inputs">
         <TabsList className="flex-wrap">
           <TabsTrigger value="inputs">

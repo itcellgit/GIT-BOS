@@ -577,6 +577,30 @@ export function OutcomesSection({ content, update, ctx }) {
                   ))}
                 </datalist>
               </div>
+              {content.units.length > 0 && (
+                <fieldset className="space-y-1">
+                  <legend className="text-xs text-muted-foreground">Based on units</legend>
+                  <div className="flex h-9 items-center gap-3">
+                    {content.units.map((_, u) => (
+                      <label key={u} className="flex items-center gap-1.5 text-sm">
+                        <Checkbox
+                          aria-label={`CO${i + 1} is based on unit ${u + 1}`}
+                          checked={(co.units ?? []).includes(u + 1)}
+                          onCheckedChange={(on) =>
+                            update((c) => {
+                              const units = new Set(c.outcomes[i].units ?? []);
+                              if (on) units.add(u + 1);
+                              else units.delete(u + 1);
+                              c.outcomes[i].units = [...units].sort((a, b) => a - b);
+                            })
+                          }
+                        />
+                        {romanNumeral(u + 1)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
             </div>
           </div>
         );

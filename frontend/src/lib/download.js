@@ -1,6 +1,6 @@
 // Downloads a PDF made by the API (GET /api{path}?download=1). Throws with the API's message.
 export async function downloadPdf(path, fileName) {
-  const res = await fetch(`/api${path}?download=1`, { credentials: "same-origin" });
+  const res = await fetch(`/api${path}${path.includes("?") ? "&" : "?"}download=1`, { credentials: "same-origin" });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.error ?? `The PDF could not be made (${res.status}).`);

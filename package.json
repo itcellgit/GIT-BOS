@@ -36,6 +36,7 @@
     "globals": "^17.13.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.6",
+    "pdf-lib": "^1.17.1",
     "prettier": "^3.6.2"
   },
   "lint-staged": {

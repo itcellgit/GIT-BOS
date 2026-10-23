@@ -3,12 +3,15 @@
 import { Router } from "express";
 import multer from "multer";
 import { can } from "@acp/shared/domain/auth/permissions";
-import { electiveGroupSchema, psoSchema, schemeCourseSchema } from "@acp/shared/schemas/config";
+import { copyCourseListSchema, electiveGroupSchema, psoSchema, schemeCourseSchema } from "@acp/shared/schemas/config";
 import { assertPermission, assertSignedIn } from "../auth/session.js";
 import { NotFoundError, PermissionError, UserError } from "../errors.js";
 import { handle, sendError } from "../http/handler.js";
+import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
+import { buildSyllabusBook } from "../services/book.js";
+import { copyCourseList } from "../services/carry-forward.js";
 import { buildCourseWorkbook, importCourseWorkbook } from "../services/course-excel.js";
 import {
   assertSchemeOpenForDepartments,
@@ -51,8 +54,21 @@ courseListsRouter.get(
     const { user, list } = await viewableList(req);
     const { scheme, programme, courses, electiveGroups, psos } = list;
     const categoryById = new Map(scheme.categories.map((c) => [c.id, c]));
-    const departments = await db.department.findMany({ where: { isActive: true }, orderBy: { code: "asc" } });
+    const [departments, copySources] = await Promise.all([
+      db.department.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+      // Earlier schemes in which this programme has a course list (Phase 4: copy into a cloned scheme).
+      db.scheme.findMany({
+        where: { id: { not: scheme.id }, schemeCourses: { some: { programmeId: programme.id } } },
+        orderBy: { code: "desc" },
+        select: {
+          id: true,
+          name: true,
+          _count: { select: { schemeCourses: { where: { programmeId: programme.id } } } },
+        },
+      }),
+    ]);
     return {
+      copySources: copySources.map((s) => ({ id: s.id, name: s.name, courseCount: s._count.schemeCourses })),
       scheme,
       programme,
       electiveGroups,
@@ -86,6 +102,20 @@ courseListsRouter.get("/workbook", async (req, res) => {
     sendError(res, e);
   }
 });
+
+/**
+ * Compiled syllabus book (Phase 4, README §8): cover, scheme table, contents with bookmarks, then the approved
+ * syllabi. `?semester=3` for one semester; without it, the whole programme.
+ */
+courseListsRouter.get(
+  "/book/pdf",
+  pdfRoute(async (req) => {
+    const { list } = await viewableList(req);
+    const semester = req.query.semester ? Number(req.query.semester) : null;
+    if (semester !== null && !Number.isInteger(semester)) throw new UserError("Unknown semester.");
+    return buildSyllabusBook({ schemeId: list.scheme.id, programmeId: list.programme.id, semester });
+  }),
+);
 
 // --- Course rows ----------------------------------------------------------------------
 
@@ -141,6 +171,35 @@ courseListsRouter.delete(
     },
     "Course removed from the list",
   ),
+);
+
+/**
+ * Copies the course list (with elective groups, PSOs and, optionally, faculty assignments) from an earlier
+ * scheme, typically the one this scheme was cloned from (README §5). Rows that break the new rules are skipped.
+ */
+courseListsRouter.post(
+  "/copy",
+  handle(copyCourseListSchema, async ({ fromSchemeId, withAssignments }, req, res) => {
+    const { actor, scheme, programme } = await context(req);
+    const result = await db.$transaction(async (tx) => {
+      const out = await copyCourseList(tx, { scheme, programme, fromSchemeId, withAssignments });
+      await writeAudit(
+        {
+          actorId: actor.id,
+          action: "schemeCourse.copy",
+          entityType: "Programme",
+          entityId: programme.id,
+          departmentId: programme.departmentId,
+          details: { schemeId: scheme.id, fromSchemeId, ...out },
+        },
+        tx,
+      );
+      return out;
+    });
+    res.locals.message =
+      `${result.copied.length} course(s) copied` + (result.skipped.length ? `, ${result.skipped.length} skipped` : "");
+    return result;
+  }),
 );
 
 // --- Elective groups --------------------------------------------------------------------
