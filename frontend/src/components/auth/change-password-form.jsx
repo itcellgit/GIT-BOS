@@ -7,6 +7,7 @@ import { passwordProblem } from "@acp/shared/schemas/account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { KeyRound } from "lucide-react";
 export function ChangePasswordForm({ required }) {
   const navigate = useNavigate();
   const refreshAll = useRefreshAll();
@@ -67,6 +68,7 @@ export function ChangePasswordForm({ required }) {
         </p>
       )}
       <Button type="submit" disabled={pending}>
+        <KeyRound />
         {pending ? "Saving…" : "Change password"}
       </Button>
     </form>

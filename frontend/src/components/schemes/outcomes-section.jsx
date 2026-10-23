@@ -4,6 +4,7 @@ import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { Button } from "@/components/ui/button";
 import { deleteOutcomeItem, saveOutcomeItem } from "@/lib/actions";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 const fields = [
   {
     name: "kind",
@@ -45,6 +46,7 @@ export function OutcomesSection({ scheme, editable }) {
                   action={saveOutcomeItem.bind(null, scheme.id, null)}
                   trigger={
                     <Button variant="outline" size="sm">
+                      <Plus />
                       Add
                     </Button>
                   }
@@ -76,6 +78,7 @@ export function OutcomesSection({ scheme, editable }) {
                         action={saveOutcomeItem.bind(null, scheme.id, o.id)}
                         trigger={
                           <Button variant="ghost" size="xs">
+                            <Pencil />
                             Edit
                           </Button>
                         }
@@ -83,6 +86,7 @@ export function OutcomesSection({ scheme, editable }) {
                       <ConfirmActionButton
                         action={deleteOutcomeItem.bind(null, scheme.id, o.id)}
                         label="Delete"
+                        icon={Trash2}
                         variant="ghost"
                         size="xs"
                         title={`Delete ${o.code}?`}

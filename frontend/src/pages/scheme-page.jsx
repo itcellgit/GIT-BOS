@@ -17,6 +17,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import {
+  Archive,
+  Brain,
+  CircleCheck,
+  FileText,
+  GraduationCap,
+  LayoutTemplate,
+  Pencil,
+  Tags,
+  Target,
+  Trash2,
+} from "lucide-react";
 export function SchemePage() {
   const { schemeId } = useParams();
   const navigate = useNavigate();
@@ -68,7 +80,12 @@ export function SchemePage() {
                         cloneFromId: "",
                       }}
                       action={updateScheme.bind(null, scheme.id)}
-                      trigger={<Button variant="outline">Edit details</Button>}
+                      trigger={
+                        <Button variant="outline">
+                          <Pencil />
+                          Edit details
+                        </Button>
+                      }
                     />
                   )}
                   {scheme.status === "DRAFT" && (
@@ -76,6 +93,7 @@ export function SchemePage() {
                       <ConfirmActionButton
                         action={publishScheme.bind(null, scheme.id)}
                         label="Publish"
+                        icon={CircleCheck}
                         variant="default"
                         size="default"
                         title={`Publish ${scheme.name}?`}
@@ -86,6 +104,7 @@ export function SchemePage() {
                         action={deleteDraftScheme.bind(null, scheme.id)}
                         onSuccess={() => navigate("/schemes", { replace: true })}
                         label="Delete draft"
+                        icon={Trash2}
                         variant="destructive"
                         size="default"
                         title={`Delete ${scheme.name}?`}
@@ -98,6 +117,7 @@ export function SchemePage() {
                     <ConfirmActionButton
                       action={retireScheme.bind(null, scheme.id)}
                       label="Retire"
+                      icon={Archive}
                       size="default"
                       title={`Retire ${scheme.name}?`}
                       description="The scheme becomes a read-only archive. Do this only when no batch is studying under it any more."
@@ -133,12 +153,30 @@ export function SchemePage() {
 
           <Tabs defaultValue="categories">
             <TabsList className="flex-wrap">
-              <TabsTrigger value="categories">Categories</TabsTrigger>
-              <TabsTrigger value="formats">Formats</TabsTrigger>
-              <TabsTrigger value="outcomes">Outcome lists</TabsTrigger>
-              <TabsTrigger value="bloom">Bloom levels</TabsTrigger>
-              <TabsTrigger value="text">Standard text</TabsTrigger>
-              <TabsTrigger value="programmes">Programmes</TabsTrigger>
+              <TabsTrigger value="categories">
+                <Tags />
+                Categories
+              </TabsTrigger>
+              <TabsTrigger value="formats">
+                <LayoutTemplate />
+                Formats
+              </TabsTrigger>
+              <TabsTrigger value="outcomes">
+                <Target />
+                Outcome lists
+              </TabsTrigger>
+              <TabsTrigger value="bloom">
+                <Brain />
+                Bloom levels
+              </TabsTrigger>
+              <TabsTrigger value="text">
+                <FileText />
+                Standard text
+              </TabsTrigger>
+              <TabsTrigger value="programmes">
+                <GraduationCap />
+                Programmes
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="categories" className="pt-4">
               <CategoriesSection scheme={scheme} editable={editable} />

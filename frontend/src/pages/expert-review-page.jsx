@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+import { MessageSquarePlus, Save, Trash2 } from "lucide-react";
 export function ExpertReviewPage() {
   const { token } = useParams();
   const query = useApiQuery(`/expert/${token}`);
@@ -112,7 +113,10 @@ function CommentForm({ token, sectionRefs }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Add a comment</CardTitle>
+        <CardTitle className="text-base">
+          <MessageSquarePlus />
+          Add a comment
+        </CardTitle>
         <CardDescription>
           Choose the unit or section it is about. You can add as many comments as you like.
         </CardDescription>
@@ -146,6 +150,7 @@ function CommentForm({ token, sectionRefs }) {
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <Button type="submit" disabled={pending || !text.trim()}>
+            <Save />
             {pending ? "Saving…" : "Save comment"}
           </Button>
         </form>
@@ -184,6 +189,7 @@ function Comments({ token, comments, open }) {
             ) : (
               open && (
                 <Button size="xs" variant="ghost" className="mt-1" disabled={pending} onClick={() => remove(c.id)}>
+                  <Trash2 />
                   Remove
                 </Button>
               )

@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CourseRulesHelper } from "@/components/forms/course-rules-helper";
+import { Save } from "lucide-react";
 const NONE = "__none__";
 /**
  * Generic create/edit dialog. Fields are described as data; validation uses the named Zod
@@ -208,6 +209,7 @@ export function EntityFormDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
+              <Save />
               {pending ? "Saving…" : submitLabel}
             </Button>
           </DialogFooter>

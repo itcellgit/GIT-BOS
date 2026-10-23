@@ -69,7 +69,7 @@ test("BoS Coordinator assigns faculty to a course and removes the assignment", a
   await dialog.getByRole("button", { name: "Assign" }).click();
   await expect(mine).toContainText("(Co-author)");
   // Remove it again so the test leaves the data as it found it.
-  await mine.getByRole("button", { name: "×" }).click();
+  await mine.getByRole("button", { name: "Remove assignment" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
   await expect(mine).toHaveCount(0);
 });

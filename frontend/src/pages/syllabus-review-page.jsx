@@ -2,7 +2,24 @@
 // (view, PDF, compare) and the Action Taken report per stage.
 import { useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import { Copy, Download, Eye, Loader2, Printer } from "lucide-react";
+import {
+  Ban,
+  ClipboardCheck,
+  ClipboardPen,
+  Copy,
+  Download,
+  Eye,
+  GitCompareArrows,
+  History,
+  Link2,
+  Loader2,
+  MessageSquarePlus,
+  MessageSquareText,
+  Pencil,
+  Printer,
+  Stamp,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   decisionLabels,
@@ -57,10 +74,24 @@ function Review({ path, data }) {
       />
       <Tabs defaultValue="inputs">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="inputs">Inputs</TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
-          {(data.canReview || data.expertLinks.length > 0) && <TabsTrigger value="experts">Expert links</TabsTrigger>}
-          <TabsTrigger value="report">Action Taken report</TabsTrigger>
+          <TabsTrigger value="inputs">
+            <MessageSquareText />
+            Inputs
+          </TabsTrigger>
+          <TabsTrigger value="versions">
+            <History />
+            Versions
+          </TabsTrigger>
+          {(data.canReview || data.expertLinks.length > 0) && (
+            <TabsTrigger value="experts">
+              <Link2 />
+              Expert links
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="report">
+            <ClipboardCheck />
+            Action Taken report
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="inputs" className="pt-4">
           <InputsTab path={path} data={data} />
@@ -157,7 +188,12 @@ function InputsTab({ path, data }) {
             defaultValues={{ sectionRef: "general", givenById: "", meetingId: "", inputText: "" }}
             action={(values) => saveReviewInput(path, null, values)}
             submitLabel="Record input"
-            trigger={<Button>Record input</Button>}
+            trigger={
+              <Button>
+                <MessageSquarePlus />
+                Record input
+              </Button>
+            }
           />
         )}
       </div>
@@ -218,6 +254,7 @@ function InputsTab({ path, data }) {
                           action={(values) => saveActionTaken(path, i.id, values)}
                           trigger={
                             <Button size="sm" variant={i.actionTaken ? "outline" : "default"}>
+                              <ClipboardPen />
                               {i.actionTaken ? "Edit action taken" : "Record action taken"}
                             </Button>
                           }
@@ -238,6 +275,7 @@ function InputsTab({ path, data }) {
                             action={(values) => saveReviewInput(path, i.id, values)}
                             trigger={
                               <Button size="sm" variant="ghost">
+                                <Pencil />
                                 Edit input
                               </Button>
                             }
@@ -246,6 +284,7 @@ function InputsTab({ path, data }) {
                             <ConfirmActionButton
                               action={() => deleteReviewInput(path, i.id)}
                               label="Remove"
+                              icon={Trash2}
                               variant="ghost"
                               title="Remove this input?"
                               description="It was recorded by mistake and will not appear in the Action Taken report."
@@ -349,7 +388,10 @@ function VersionsTab({ path, data }) {
 
       {(data.approvals.length > 0 || data.unlocks.length > 0) && (
         <div className="space-y-2">
-          <h2 className="font-semibold">Approvals and unlocks</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <Stamp className="size-4.5 text-muted-foreground" aria-hidden="true" />
+            Approvals and unlocks
+          </h2>
           <ul className="divide-y rounded-lg border text-sm">
             {[
               ...data.approvals.map((a) => ({
@@ -381,7 +423,10 @@ function VersionsTab({ path, data }) {
 
       {versions.length > 1 && (
         <div className="space-y-3">
-          <h2 className="font-semibold">Compare versions</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <GitCompareArrows className="size-4.5 text-muted-foreground" aria-hidden="true" />
+            Compare versions
+          </h2>
           <div className="flex flex-wrap items-end gap-3">
             <VersionSelect label="From" value={from} onChange={setFrom} versions={versions} />
             <VersionSelect label="To" value={to} onChange={setTo} versions={versions} />
@@ -573,7 +618,12 @@ function ExpertLinksTab({ path, data }) {
             action={(values) => issueExpertLink(path, values)}
             onSuccess={(result) => setIssued(result.data)}
             submitLabel="Issue link"
-            trigger={<Button>Issue link</Button>}
+            trigger={
+              <Button>
+                <Link2 />
+                Issue link
+              </Button>
+            }
           />
         )}
       </div>
@@ -638,6 +688,7 @@ function ExpertLinksTab({ path, data }) {
                         <ConfirmActionButton
                           action={() => revokeExpertLink(path, l.id)}
                           label="Revoke"
+                          icon={Ban}
                           variant="outline"
                           title={`Revoke ${l.reviewer.name}'s link?`}
                           description="The link stops working at once. Comments already given stay recorded."

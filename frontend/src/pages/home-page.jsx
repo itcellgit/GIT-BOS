@@ -39,7 +39,10 @@ export function HomePage() {
 
             <Card className="gap-0 pb-0">
               <CardHeader className="border-b">
-                <CardTitle>My courses</CardTitle>
+                <CardTitle>
+                  <BookOpen />
+                  My courses
+                </CardTitle>
                 <CardDescription>Courses for which you are framing the syllabus. Open one to edit it.</CardDescription>
               </CardHeader>
               {assignments.length === 0 ? (
@@ -86,6 +89,7 @@ export function HomePage() {
                 {departments.length > 0 && (
                   <LinkListCard
                     title="My departments"
+                    icon={Building2}
                     description="Course lists, reviewers, meetings and faculty assignments."
                     items={departments.map((d) => ({
                       key: d.id,
@@ -98,6 +102,7 @@ export function HomePage() {
                 {showSchemes && (
                   <LinkListCard
                     title="Schemes"
+                    icon={Layers}
                     description={
                       can(me, "scheme.configure")
                         ? "Configure schemes, course categories, formats and outcome lists."
@@ -144,11 +149,14 @@ function StatTile({ icon: Icon, label, value, detail }) {
   );
 }
 
-function LinkListCard({ title, description, items }) {
+function LinkListCard({ title, icon: Icon, description, items }) {
   return (
     <Card className="gap-0 pb-0">
       <CardHeader className="border-b">
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>
+          <Icon />
+          {title}
+        </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <ul className="divide-y">

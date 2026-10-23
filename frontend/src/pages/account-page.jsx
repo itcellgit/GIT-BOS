@@ -1,5 +1,5 @@
 import { Link, useOutletContext } from "react-router";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, KeyRound } from "lucide-react";
 import { roleLabels } from "@acp/shared/domain/auth/permissions";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { BrandMark } from "@/components/layout/brand-mark";
@@ -92,7 +92,10 @@ export function AccountPage() {
         {me.hasPassword && (
           <Card>
             <CardHeader>
-              <CardTitle>Change password</CardTitle>
+              <CardTitle>
+                <KeyRound />
+                Change password
+              </CardTitle>
               <CardDescription>Changing your password signs you out on all other devices.</CardDescription>
             </CardHeader>
             <CardContent>

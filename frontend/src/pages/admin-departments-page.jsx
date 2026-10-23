@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { Building2, Pencil, Plus } from "lucide-react";
 const departmentFields = [
   { name: "code", label: "Code", type: "text", width: "third", placeholder: "CSE" },
   { name: "name", label: "Name", type: "text", width: "full", placeholder: "Computer Science and Engineering" },
@@ -60,7 +61,12 @@ function Departments({ departments }) {
             fields={departmentFields}
             defaultValues={{ code: "", name: "", isActive: true }}
             action={saveDepartment.bind(null, null)}
-            trigger={<Button>Add department</Button>}
+            trigger={
+              <Button>
+                <Plus />
+                Add department
+              </Button>
+            }
           />
         }
       />
@@ -69,6 +75,7 @@ function Departments({ departments }) {
           <Card key={d.id} className={d.isActive ? undefined : "opacity-60"}>
             <CardHeader>
               <CardTitle>
+                <Building2 />
                 {d.code} {!d.isActive && <Badge variant="outline">inactive</Badge>}
               </CardTitle>
               <CardDescription>
@@ -86,6 +93,7 @@ function Departments({ departments }) {
                   action={saveDepartment.bind(null, d.id)}
                   trigger={
                     <Button variant="outline" size="sm">
+                      <Pencil />
                       Edit
                     </Button>
                   }
@@ -109,6 +117,7 @@ function Departments({ departments }) {
                       action={saveProgramme.bind(null, p.id)}
                       trigger={
                         <Button variant="ghost" size="xs">
+                          <Pencil />
                           Edit
                         </Button>
                       }
@@ -124,6 +133,7 @@ function Departments({ departments }) {
                 action={saveProgramme.bind(null, null)}
                 trigger={
                   <Button variant="outline" size="sm">
+                    <Plus />
                     Add programme
                   </Button>
                 }

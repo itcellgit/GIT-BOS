@@ -6,19 +6,16 @@ import {
   nextVersion,
   stageAfter,
   stageLabels,
-  syllabusStatusLabels,
   versionLabel,
   workflowBlocker,
 } from "@acp/shared/domain/reviews/workflow";
 import { approveSyllabus, closeStage, commitVersion, submitSyllabus, unlockSyllabus } from "@/lib/actions";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-const statusVariant = { DRAFT: "warning", IN_REVIEW: "secondary", APPROVED: "success", REVISING: "warning" };
-
+import { SyllabusStatusBadge } from "@/components/syllabus/status-badge";
 const reasonField = (label, description) => ({ name: "reason", label, type: "textarea", rows: 3, description });
 const approvalFields = [
   { name: "approvedOn", label: "Academic Council meeting date", type: "date", width: "half" },
@@ -72,7 +69,7 @@ export function WorkflowBar({ path, data, state, beforeAction }) {
       <CardContent className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={statusVariant[status]}>{syllabusStatusLabels[status]}</Badge>
+            <SyllabusStatusBadge status={status} />
             {label && <span className="font-semibold">{label}</span>}
             {status === "IN_REVIEW" && <span className="text-sm">· {stageLabels[stage]} stage</span>}
             {data.syllabus.officialVersion && (

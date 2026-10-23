@@ -2,6 +2,7 @@ import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { saveBloomLevel } from "@/lib/actions";
+import { Pencil } from "lucide-react";
 const fields = [
   { name: "name", label: "Name", type: "text", width: "half" },
   {
@@ -50,6 +51,7 @@ export function BloomSection({ scheme, editable }) {
                 action={saveBloomLevel.bind(null, scheme.id, b.id)}
                 trigger={
                   <Button variant="outline" size="sm">
+                    <Pencil />
                     Edit
                   </Button>
                 }

@@ -11,10 +11,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-/** A button that asks for confirmation, then runs an API action and shows the result. */
+/**
+ * A button that asks for confirmation, then runs an API action and shows the result.
+ * `icon` (a lucide icon) shows before the label; with `iconOnly` the label becomes the accessible name.
+ */
 export function ConfirmActionButton({
   action,
   label,
+  icon: Icon,
+  iconOnly = false,
   title,
   description,
   confirmLabel = "Confirm",
@@ -28,8 +33,14 @@ export function ConfirmActionButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant={variant} size={size}>
-          {label}
+        <Button
+          variant={variant}
+          size={iconOnly ? `icon-${size}` : size}
+          aria-label={iconOnly ? label : undefined}
+          title={iconOnly ? label : undefined}
+        >
+          {Icon && <Icon />}
+          {!iconOnly && label}
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -58,6 +69,7 @@ export function ConfirmActionButton({
               })
             }
           >
+            {Icon && !pending && <Icon />}
             {pending ? "Working…" : confirmLabel}
           </Button>
         </DialogFooter>

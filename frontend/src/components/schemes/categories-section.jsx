@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { addCreditPattern, deleteCategory, deleteCreditPattern, saveCategory } from "@/lib/actions";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 const formatOptions = formats.map((f) => ({ value: f, label: formatLabels[f] }));
 const categoryFields = [
   { name: "code", label: "Code", type: "text", width: "third", placeholder: "PCC" },
@@ -59,7 +60,12 @@ export function CategoriesSection({ scheme, editable }) {
               passFail: false,
             }}
             action={saveCategory.bind(null, scheme.id, null)}
-            trigger={<Button>Add category</Button>}
+            trigger={
+              <Button>
+                <Plus />
+                Add category
+              </Button>
+            }
           />
         )}
       </div>
@@ -110,7 +116,9 @@ export function CategoriesSection({ scheme, editable }) {
                             {editable && (
                               <ConfirmActionButton
                                 action={deleteCreditPattern.bind(null, scheme.id, p.id)}
-                                label="×"
+                                label="Remove credit pattern"
+                                icon={X}
+                                iconOnly
                                 variant="ghost"
                                 size="xs"
                                 title="Remove credit pattern?"
@@ -133,7 +141,8 @@ export function CategoriesSection({ scheme, editable }) {
                       action={addCreditPattern.bind(null, scheme.id, c.id)}
                       trigger={
                         <Button variant="link" size="xs" className="px-0">
-                          + Add pattern
+                          <Plus />
+                          Add pattern
                         </Button>
                       }
                     />
@@ -160,6 +169,7 @@ export function CategoriesSection({ scheme, editable }) {
                         action={saveCategory.bind(null, scheme.id, c.id)}
                         trigger={
                           <Button variant="outline" size="sm">
+                            <Pencil />
                             Edit
                           </Button>
                         }
@@ -167,6 +177,7 @@ export function CategoriesSection({ scheme, editable }) {
                       <ConfirmActionButton
                         action={deleteCategory.bind(null, scheme.id, c.id)}
                         label="Delete"
+                        icon={Trash2}
                         variant="destructive"
                         title={`Delete ${c.code}?`}
                         description="Only categories that no course uses can be deleted."

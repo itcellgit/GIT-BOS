@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { AlertTriangle, Check, CloudOff, FileText, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, CloudOff, Eye, FileText, History, Loader2, RotateCw } from "lucide-react";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { syllabusTotals } from "@acp/shared/domain/syllabi/content";
 import {
@@ -9,7 +9,6 @@ import {
   validateSyllabus,
   validationContext,
 } from "@acp/shared/domain/syllabi/validate";
-import { syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
 import { assignmentRoleLabels, textBlockKindLabels } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -35,6 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+import { SyllabusStatusBadge } from "@/components/syllabus/status-badge";
 /** The editor's sections for a format, in template order (README Appendix B). */
 function sectionsFor(format) {
   const hasUnits = format?.unitCount > 0;
@@ -127,8 +127,13 @@ function Editor({ path, data }) {
             <span>· {data.offerings.map((o) => o.programme.code).join(", ")}</span>
             <span>· Semester {first.semester}</span>
             {data.format && <Badge variant="secondary">{formatLabels[data.format.format]}</Badge>}
-            <Badge variant="outline">{syllabusStatusLabels[data.workflow.status]}</Badge>
-            {!data.canEdit && <Badge variant="outline">Read-only</Badge>}
+            <SyllabusStatusBadge status={data.workflow.status} />
+            {!data.canEdit && (
+              <Badge variant="outline">
+                <Eye />
+                Read-only
+              </Badge>
+            )}
           </span>
         }
         actions={
@@ -177,6 +182,7 @@ function Editor({ path, data }) {
           <AlertDescription>
             <p>{autosave.conflict.message}</p>
             <Button size="sm" variant="outline" className="mt-2" onClick={autosave.acceptLatest}>
+              <History />
               Load the saved version
             </Button>
           </AlertDescription>
@@ -245,6 +251,7 @@ function SaveStatus({ autosave }) {
       <span className={cn("truncate", view.tone)}>{view.text}</span>
       {status === "error" && (
         <Button size="xs" variant="outline" onClick={saveNow}>
+          <RotateCw />
           Retry
         </Button>
       )}

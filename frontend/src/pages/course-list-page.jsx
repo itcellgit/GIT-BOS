@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+import { CalendarRange, FileSpreadsheet, Pencil, Plus, Shuffle, Target, Trash2 } from "lucide-react";
 const groupFields = [
   { name: "semester", label: "Semester", type: "number", width: "third" },
   { name: "code", label: "Group code", type: "text", width: "third", placeholder: "1BCSL308x" },
@@ -113,7 +114,10 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
         actions={
           <>
             <Button asChild variant="outline">
-              <a href={workbook}>Download Excel</a>
+              <a href={workbook}>
+                <FileSpreadsheet />
+                Download Excel
+              </a>
             </Button>
             {editable && (
               <>
@@ -147,7 +151,12 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                     examHours: "",
                   }}
                   action={saveSchemeCourse.bind(null, scheme.id, programme.id, null)}
-                  trigger={<Button>Add course</Button>}
+                  trigger={
+                    <Button>
+                      <Plus />
+                      Add course
+                    </Button>
+                  }
                 />
               </>
             )}
@@ -209,6 +218,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                 action={saveSchemeCourse.bind(null, scheme.id, programme.id, r.id)}
                 trigger={
                   <Button variant="outline" size="xs">
+                    <Pencil />
                     Edit
                   </Button>
                 }
@@ -218,6 +228,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
               <ConfirmActionButton
                 action={deleteSchemeCourse.bind(null, scheme.id, programme.id, r.id)}
                 label="Remove"
+                icon={Trash2}
                 variant="ghost"
                 size="xs"
                 title={`Remove ${r.course.code} from the list?`}
@@ -232,7 +243,10 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Elective groups</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              <Shuffle className="size-4.5 text-muted-foreground" aria-hidden="true" />
+              Elective groups
+            </h2>
             {editable && (
               <EntityFormDialog
                 schema="electiveGroup"
@@ -242,6 +256,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                 action={saveElectiveGroup.bind(null, scheme.id, programme.id, null)}
                 trigger={
                   <Button variant="outline" size="sm">
+                    <Plus />
                     Add group
                   </Button>
                 }
@@ -265,6 +280,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                       action={saveElectiveGroup.bind(null, scheme.id, programme.id, g.id)}
                       trigger={
                         <Button variant="ghost" size="xs">
+                          <Pencil />
                           Edit
                         </Button>
                       }
@@ -272,6 +288,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                     <ConfirmActionButton
                       action={deleteElectiveGroup.bind(null, scheme.id, programme.id, g.id)}
                       label="Delete"
+                      icon={Trash2}
                       variant="ghost"
                       size="xs"
                       title={`Delete ${g.code}?`}
@@ -287,7 +304,10 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Programme Specific Outcomes (PSOs)</h2>
+            <h2 className="flex items-center gap-2 font-semibold">
+              <Target className="size-4.5 text-muted-foreground" aria-hidden="true" />
+              Programme Specific Outcomes (PSOs)
+            </h2>
             {editable && (
               <EntityFormDialog
                 schema="pso"
@@ -297,6 +317,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                 action={savePso.bind(null, scheme.id, programme.id, null)}
                 trigger={
                   <Button variant="outline" size="sm">
+                    <Plus />
                     Add PSO
                   </Button>
                 }
@@ -322,6 +343,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                       action={savePso.bind(null, scheme.id, programme.id, p.id)}
                       trigger={
                         <Button variant="ghost" size="xs">
+                          <Pencil />
                           Edit
                         </Button>
                       }
@@ -329,6 +351,7 @@ function CourseList({ scheme, programme, courses: rows, electiveGroups, psos, de
                     <ConfirmActionButton
                       action={deletePso.bind(null, scheme.id, programme.id, p.id)}
                       label="Delete"
+                      icon={Trash2}
                       variant="ghost"
                       size="xs"
                       title={`Delete ${p.code}?`}
@@ -358,7 +381,10 @@ function SemesterTable({ semester, rows, groups, editable, renderEdit, renderDel
   return (
     <section className="space-y-2">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold">Semester {semester}</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <CalendarRange className="size-4.5 text-muted-foreground" aria-hidden="true" />
+          Semester {semester}
+        </h2>
         <p className="text-sm text-muted-foreground">
           {rows.length} course rows · {credits} credits (one option counted per elective group)
         </p>

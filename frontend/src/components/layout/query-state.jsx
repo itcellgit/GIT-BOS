@@ -1,5 +1,5 @@
 import { Link, Navigate } from "react-router";
-import { FileQuestion, Loader2, TriangleAlert } from "lucide-react";
+import { FileQuestion, House, Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function LoadingScreen() {
@@ -48,7 +48,10 @@ export function StatusMessage({ icon: Icon, title, children }) {
         {children && <p className="text-sm text-muted-foreground">{children}</p>}
       </div>
       <Button asChild variant="outline">
-        <Link to="/">Back to home</Link>
+        <Link to="/">
+          <House />
+          Back to home
+        </Link>
       </Button>
     </div>
   );

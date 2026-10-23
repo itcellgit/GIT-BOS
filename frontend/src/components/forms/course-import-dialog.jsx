@@ -12,6 +12,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Download, Upload } from "lucide-react";
 export function CourseImportDialog({ action, templateHref }) {
   const [open, setOpen] = useState(false);
   const refreshAll = useRefreshAll();
@@ -28,7 +29,10 @@ export function CourseImportDialog({ action, templateHref }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline">Import from Excel</Button>
+        <Button variant="outline">
+          <Upload />
+          Import from Excel
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
@@ -58,7 +62,10 @@ export function CourseImportDialog({ action, templateHref }) {
           }}
         >
           <Button asChild variant="link" className="px-0">
-            <a href={templateHref}>Download the workbook (current list + valid values)</a>
+            <a href={templateHref}>
+              <Download />
+              Download the workbook (current list + valid values)
+            </a>
           </Button>
           <Input
             type="file"
@@ -96,6 +103,7 @@ export function CourseImportDialog({ action, templateHref }) {
               Close
             </Button>
             <Button type="submit" disabled={pending}>
+              <Upload />
               {pending ? "Checking…" : "Upload and import"}
             </Button>
           </DialogFooter>

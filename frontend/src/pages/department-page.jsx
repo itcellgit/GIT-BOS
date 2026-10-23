@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
-import { stageLabels, syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
+import { stageLabels } from "@acp/shared/domain/reviews/workflow";
 import { assignmentRoleLabels, reviewerCategoryLabels, toOptions } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
 import { addAssignment, removeAssignment, saveMeeting, saveReviewer } from "@/lib/actions";
@@ -14,6 +14,20 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import {
+  BookOpen,
+  CalendarDays,
+  CalendarPlus,
+  CircleDashed,
+  ListChecks,
+  Pencil,
+  UserCheck,
+  UserPlus,
+  UserX,
+  Users,
+  X,
+} from "lucide-react";
+import { SyllabusStatusBadge } from "@/components/syllabus/status-badge";
 const reviewerFields = [
   { name: "name", label: "Name", type: "text", width: "half" },
   { name: "category", label: "Category", type: "select", options: toOptions(reviewerCategoryLabels), width: "half" },
@@ -31,14 +45,18 @@ export function DepartmentPage() {
   return <QueryState query={query}>{(data) => <Department {...data} />}</QueryState>;
 }
 
-const syllabusVariant = { DRAFT: "warning", IN_REVIEW: "secondary", APPROVED: "success", REVISING: "warning" };
-
 /** "V2.1 · Industry Experts & Alumni" — where a course's syllabus stands. */
 function SyllabusStatus({ syllabus }) {
-  if (!syllabus) return <span className="text-xs text-muted-foreground">Not started</span>;
+  if (!syllabus)
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <CircleDashed className="size-3.5" aria-hidden="true" />
+        Not started
+      </span>
+    );
   return (
     <div className="space-y-0.5">
-      <Badge variant={syllabusVariant[syllabus.status]}>{syllabusStatusLabels[syllabus.status]}</Badge>
+      <SyllabusStatusBadge status={syllabus.status} />
       {syllabus.label && (
         <div className="text-xs text-muted-foreground">
           {syllabus.label}
@@ -68,11 +86,26 @@ function Department({ department, editable, programmes, schemes, courses, review
       />
       <Tabs defaultValue="courses">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="courses">Courses &amp; faculty</TabsTrigger>
-          <TabsTrigger value="lists">Programme course lists</TabsTrigger>
-          <TabsTrigger value="meetings">Meetings</TabsTrigger>
-          <TabsTrigger value="reviewers">Reviewers</TabsTrigger>
-          <TabsTrigger value="faculty">Faculty</TabsTrigger>
+          <TabsTrigger value="courses">
+            <BookOpen />
+            Courses &amp; faculty
+          </TabsTrigger>
+          <TabsTrigger value="lists">
+            <ListChecks />
+            Programme course lists
+          </TabsTrigger>
+          <TabsTrigger value="meetings">
+            <CalendarDays />
+            Meetings
+          </TabsTrigger>
+          <TabsTrigger value="reviewers">
+            <UserCheck />
+            Reviewers
+          </TabsTrigger>
+          <TabsTrigger value="faculty">
+            <Users />
+            Faculty
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="courses" className="space-y-3 pt-4">
@@ -113,7 +146,12 @@ function Department({ department, editable, programmes, schemes, courses, review
                       </TableCell>
                       <TableCell>{c.programmes.join(", ")}</TableCell>
                       <TableCell className="whitespace-normal">
-                        {c.assignments.length === 0 && <Badge variant="warning">Not assigned</Badge>}
+                        {c.assignments.length === 0 && (
+                          <Badge variant="warning">
+                            <UserX />
+                            Not assigned
+                          </Badge>
+                        )}
                         <ul className="space-y-1">
                           {c.assignments.map((a) => (
                             <li key={a.id} className="flex items-center gap-1 text-sm">
@@ -122,7 +160,9 @@ function Department({ department, editable, programmes, schemes, courses, review
                               {editable && (
                                 <ConfirmActionButton
                                   action={removeAssignment.bind(null, department.code, a.id)}
-                                  label="×"
+                                  label="Remove assignment"
+                                  icon={X}
+                                  iconOnly
                                   variant="ghost"
                                   size="xs"
                                   title="Remove assignment?"
@@ -156,6 +196,7 @@ function Department({ department, editable, programmes, schemes, courses, review
                             submitLabel="Assign"
                             trigger={
                               <Button variant="outline" size="sm">
+                                <UserPlus />
                                 Assign
                               </Button>
                             }
@@ -228,7 +269,12 @@ function Department({ department, editable, programmes, schemes, courses, review
                   isActive: true,
                 }}
                 action={saveReviewer.bind(null, department.code, null)}
-                trigger={<Button>Add reviewer</Button>}
+                trigger={
+                  <Button>
+                    <UserPlus />
+                    Add reviewer
+                  </Button>
+                }
               />
             )}
           </div>
@@ -273,6 +319,7 @@ function Department({ department, editable, programmes, schemes, courses, review
                             action={saveReviewer.bind(null, department.code, r.id)}
                             trigger={
                               <Button variant="outline" size="sm">
+                                <Pencil />
                                 Edit
                               </Button>
                             }
@@ -369,7 +416,12 @@ function Meetings({ department, editable, meetings, schemes, reviewers }) {
             fields={fields}
             defaultValues={blank}
             action={saveMeeting.bind(null, department.code, null)}
-            trigger={<Button>Add meeting</Button>}
+            trigger={
+              <Button>
+                <CalendarPlus />
+                Add meeting
+              </Button>
+            }
           />
         )}
       </div>
@@ -424,6 +476,7 @@ function Meetings({ department, editable, meetings, schemes, reviewers }) {
                         action={saveMeeting.bind(null, department.code, m.id)}
                         trigger={
                           <Button variant="outline" size="sm">
+                            <Pencil />
                             Edit
                           </Button>
                         }

@@ -7,7 +7,7 @@ function CardHeader({ className, ...props }) {
     return (<div data-slot="card-header" className={cn("group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-lg px-(--card-spacing) has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-(--card-spacing)", className)} {...props}/>);
 }
 function CardTitle({ className, ...props }) {
-    return (<div data-slot="card-title" className={cn("font-heading text-[0.95rem] leading-snug font-semibold text-foreground group-data-[size=sm]/card:text-sm", className)} {...props}/>);
+    return (<div data-slot="card-title" className={cn("flex items-center gap-2 font-heading text-[0.95rem] leading-snug font-semibold text-foreground [&>svg]:size-4.5 [&>svg]:shrink-0 [&>svg]:text-muted-foreground group-data-[size=sm]/card:text-sm", className)} {...props}/>);
 }
 function CardDescription({ className, ...props }) {
     return <div data-slot="card-description" className={cn("text-sm text-muted-foreground", className)} {...props}/>;

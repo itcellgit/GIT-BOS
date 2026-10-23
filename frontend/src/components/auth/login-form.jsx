@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Eye, EyeOff, KeyRound } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, KeyRound, LogIn, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { passwordProblem } from "@acp/shared/schemas/account";
@@ -225,6 +225,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
           <form onSubmit={sendCode} className="space-y-4">
             {emailField}
             <Button type="submit" className="w-full" disabled={busy}>
+              <Mail />
               {busy ? "Sending…" : "Send code"}
             </Button>
           </form>
@@ -245,6 +246,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy || code.length !== 6}>
+              <LogIn />
               {busy ? "Signing in…" : "Sign in"}
             </Button>
             <Button type="button" variant="link" className="w-full" onClick={() => go("code-email")}>
@@ -280,6 +282,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
+              <LogIn />
               {busy ? "Signing in…" : "Sign in"}
             </Button>
             <Button
@@ -300,6 +303,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
           <form onSubmit={sendResetCode} className="space-y-4">
             {emailField}
             <Button type="submit" className="w-full" disabled={busy}>
+              <Mail />
               {busy ? "Sending…" : "Send reset code"}
             </Button>
             <Button type="button" variant="link" className="w-full" onClick={() => go("password")}>
@@ -346,6 +350,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy || code.length !== 6}>
+              <KeyRound />
               {busy ? "Saving…" : "Reset password"}
             </Button>
             <Button type="button" variant="link" className="w-full" onClick={() => go("password")}>

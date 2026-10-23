@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+import { KeyRound, Pencil, ShieldPlus, UserPlus, X } from "lucide-react";
 const userFields = [
   { name: "name", label: "Full name", type: "text", width: "half" },
   { name: "email", label: "Email", type: "email", width: "half", description: "Used to sign in." },
@@ -69,7 +70,12 @@ function Users({ users, departments, actorIsSuperAdmin }) {
             fields={userFields}
             defaultValues={{ name: "", email: "", designation: "", isActive: true }}
             action={saveUser.bind(null, null)}
-            trigger={<Button>Add user</Button>}
+            trigger={
+              <Button>
+                <UserPlus />
+                Add user
+              </Button>
+            }
           />
         }
       />
@@ -121,7 +127,9 @@ function Users({ users, departments, actorIsSuperAdmin }) {
                           {!locked && (r.role !== "SUPER_ADMIN" || actorIsSuperAdmin) && (
                             <ConfirmActionButton
                               action={removeRole.bind(null, r.id)}
-                              label="×"
+                              label="Remove role"
+                              icon={X}
+                              iconOnly
                               size="xs"
                               variant="ghost"
                               title="Remove role?"
@@ -149,6 +157,7 @@ function Users({ users, departments, actorIsSuperAdmin }) {
                             submitLabel="Set password"
                             trigger={
                               <Button variant="outline" size="sm">
+                                <KeyRound />
                                 {u.hasPassword ? "Reset password" : "Set password"}
                               </Button>
                             }
@@ -162,6 +171,7 @@ function Users({ users, departments, actorIsSuperAdmin }) {
                           action={addRole.bind(null, u.id)}
                           trigger={
                             <Button variant="outline" size="sm">
+                              <ShieldPlus />
                               Add role
                             </Button>
                           }
@@ -179,6 +189,7 @@ function Users({ users, departments, actorIsSuperAdmin }) {
                           action={saveUser.bind(null, u.id)}
                           trigger={
                             <Button variant="outline" size="sm">
+                              <Pencil />
                               Edit
                             </Button>
                           }

@@ -3,6 +3,7 @@ import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { saveFormatConfig } from "@/lib/actions";
+import { Pencil } from "lucide-react";
 const fields = [
   { name: "title", label: "Heading printed on the syllabus", type: "text" },
   { name: "unitCount", label: "Number of units", type: "number", width: "third" },
@@ -49,6 +50,7 @@ export function FormatsSection({ scheme, editable }) {
                     action={saveFormatConfig.bind(null, scheme.id, f.id)}
                     trigger={
                       <Button variant="outline" size="sm">
+                        <Pencil />
                         Edit
                       </Button>
                     }

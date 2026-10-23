@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+import { Plus } from "lucide-react";
 export function SchemesPage() {
   const navigate = useNavigate();
   const query = useApiQuery("/schemes");
@@ -69,7 +70,12 @@ export function SchemesPage() {
                     action={createScheme}
                     onSuccess={(result) => navigate(`/schemes/${result.data.id}`)}
                     submitLabel="Create draft"
-                    trigger={<Button>New scheme</Button>}
+                    trigger={
+                      <Button>
+                        <Plus />
+                        New scheme
+                      </Button>
+                    }
                   />
                 )
               }

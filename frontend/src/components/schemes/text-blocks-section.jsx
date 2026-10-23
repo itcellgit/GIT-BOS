@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { deleteTextBlock, saveTextBlock } from "@/lib/actions";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 const fields = [
   { name: "kind", label: "Type", type: "select", options: toOptions(textBlockKindLabels), width: "half" },
   {
@@ -50,7 +51,12 @@ export function TextBlocksSection({ scheme, editable }) {
               body: "",
             }}
             action={saveTextBlock.bind(null, scheme.id, null)}
-            trigger={<Button>Add text</Button>}
+            trigger={
+              <Button>
+                <Plus />
+                Add text
+              </Button>
+            }
           />
         )}
       </div>
@@ -84,6 +90,7 @@ export function TextBlocksSection({ scheme, editable }) {
                     action={saveTextBlock.bind(null, scheme.id, t.id)}
                     trigger={
                       <Button variant="ghost" size="xs">
+                        <Pencil />
                         Edit
                       </Button>
                     }
@@ -91,6 +98,7 @@ export function TextBlocksSection({ scheme, editable }) {
                   <ConfirmActionButton
                     action={deleteTextBlock.bind(null, scheme.id, t.id)}
                     label="Delete"
+                    icon={Trash2}
                     variant="ghost"
                     size="xs"
                     title="Delete this text?"
