@@ -6,7 +6,7 @@ Faculty fill in their course syllabus through web forms, following the course-fo
 
 | | |
 |---|---|
-| **Status** | Phase 0 built; Phase 1 (Theory editor, validation, print layout and PDF) built 15 Oct 2026 — see §12. Strategy draft v0.5 |
+| **Status** | Phase 0 built; Phase 1 (Theory editor, validation, print layout and PDF) built 15 Oct 2026; Phase 2 review workflow (versions, inputs, stages, unlock, Action Taken report) built 23 Oct 2026 — see §12. Strategy draft v0.5 |
 | **Stack** | **PERN**, plain **JavaScript** (no TypeScript): **P**ostgreSQL 17 (Prisma) · **E**xpress 5 · **R**eact 19 (Vite, Tailwind CSS 4, shadcn/ui) · **N**ode.js 24 · Better Auth |
 | **Hosting** | Hostinger VPS (Ubuntu 24.04, Docker Compose, Caddy) |
 | **Maintained by** | In-house faculty development team |
@@ -487,7 +487,7 @@ academic-curriculum-portal/
 ├─ shared/                 USED BY BOTH; pure JavaScript, no database, no React
 │  └─ src/
 │     ├─ domain/           business rules + unit tests: credit/hour rules, permissions (can())
-│     │                    later: syllabi/, reviews/                         (Phases 1–2)
+│     │                    syllabi/ (content, validation), reviews/ (workflow, compare)
 │     ├─ schemas/          Zod validation schemas (forms and API), password policy
 │     ├─ print/            print layouts: syllabus JSON → complete HTML document (preview and PDF),
 │     │                    rich-text.js for standard text blocks (tables, lists, bold)
@@ -529,6 +529,7 @@ All endpoints are under `/api` and return JSON (`{ ok, data, message }` or `{ ok
 | Course lists (Layer 2) | `GET /schemes/:sid/programmes/:pid`, `/courses`, `/elective-groups`, `/psos`, `GET /workbook` (Excel), `POST /import` (Excel upload) |
 | Departments | `GET /departments/:code`, `/reviewers`, `/schemes/:sid/courses/:cid/assignments`, `DELETE /assignments/:id` |
 | Syllabi (Phase 1) | `GET /syllabi/:schemeId/:courseId` (editor data, working copy and `validation` issues), `PUT /syllabi/:schemeId/:courseId` (autosave with `revision`; 409 on conflict), `GET /syllabi/:schemeId/:courseId/pdf` (saved copy as PDF; `?download=1` for an attachment) |
+| Review workflow (Phase 2) | under `/syllabi/:schemeId/:courseId`: `GET /review` (versions, inputs, meetings, reviewers, unlocks, approvals); `POST /submit`, `POST /versions` (save version), `POST /close` (close stage; Academic Council needs `approvedOn` + `reference`), `POST /unlock`, `POST /approve`; `GET /versions/:id`, `GET /versions/:id/pdf`; `POST/PUT/DELETE /inputs/:id`, `PUT /inputs/:id/action`; `GET /action-taken/:stage/pdf`. Meetings: `POST/PUT /departments/:code/meetings/:id` |
 | Print assets | `GET /print/fonts/:file` (Carlito, for the on-screen preview) |
 
 ### VPS set-up
@@ -638,11 +639,20 @@ Each phase ends with a demo to the BoS Coordinator or Dean Academics and a short
   - CIE scheme and rubrics are picked by year of study (2nd vs 3rd year); the 2025 Theory CIE/SEE/rubric text is seeded as text blocks (`npm run db:seed` adds missing blocks to existing databases)
 - **Accept when:** a faculty member produces a Theory syllabus PDF that, printed side by side with the Word reference, matches it section for section, and the header data comes from the scheme.
 
-### Phase 2 — Versions and the BOS review workflow
-- Submit (V1.0), immutable versions, comparison between versions
-- Review meetings, inputs by section, action taken, closing stages (V2.0 / V3.0 / V4.0), approval record
-- Unlock with reason; minor versions
-- **Action Taken report** generation
+### Phase 2 — Versions and the BOS review workflow — **✅ workflow built 23 Oct 2026** (AI, Phase 2A, not started)
+- Submit (V1.0), immutable versions, comparison between versions — **✅**
+  - `shared/src/domain/reviews/workflow.js`: version numbering, stage order and the guard for every action (`workflowBlocker`), used by the API and to enable buttons; `compare.js`: section-by-section line diff
+  - `SyllabusVersion` rows are never updated or deleted: a PostgreSQL trigger refuses it
+  - submitting, saving a version and closing a stage are refused while the checks report errors
+- Review meetings, inputs by section, action taken, closing stages (V2.0 / V3.0 / V4.0), approval record — **✅**
+  - meetings: department page → *Meetings* (stage, date and time, venue, reviewers present); one meeting serves many syllabi
+  - inputs: syllabus → *Inputs, versions & Action Taken*; recorded by the BoS Coordinator against the latest version and a section (unit, CO, books…); the Course Coordinator records the action taken and a decision (accepted / partly / not accepted)
+  - during a stage the working copy stays editable to incorporate inputs; *Save version* creates the next minor version and records answered inputs as incorporated in it
+  - closing Internal BOS → V2.0, closing the expert stage → V2.n only if there are uncommitted changes, External BOS → V3.0; closing the Academic Council stage takes the meeting date and reference and creates V4.0 *Approved* in one step (working assumption for rule 4: the approval is recorded when the stage closes)
+- Unlock with reason; minor versions — **✅** only an approved syllabus is locked, so *Unlock* applies after approval; the correction is saved as V4.1 and *Record approval* makes it official (V4.0 stays official until then)
+- **Action Taken report** generation — **✅** `shared/src/print/action-taken-layout.js`, one report per stage with the four headings, preview and PDF; unlocks appear as extra rows
+- Tests: workflow and print unit tests; `e2e/review-workflow.spec.js` runs V1.0 → V4.0 → unlock → V4.1 in the browser (each run adds its own "E2E workflow test course" in semester 8, because versions cannot be deleted)
+- **Not yet:** expert links (Phase 3); notifications by email; a check of the Action Taken layout against `Action Taken Format.docx` (not available on the development machine)
 - **Accept when:** one syllabus goes V1.0 → V4.0 with inputs at every stage and correct Action Taken reports, and an unlock produces V4.1.
 
 ### Phase 2A — AI assistance (built alongside Phase 2; see §15)

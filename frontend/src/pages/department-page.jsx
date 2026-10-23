@@ -1,8 +1,10 @@
 import { Link, useParams } from "react-router";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
+import { stageLabels, syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
 import { assignmentRoleLabels, reviewerCategoryLabels, toOptions } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
-import { addAssignment, removeAssignment, saveReviewer } from "@/lib/actions";
+import { addAssignment, removeAssignment, saveMeeting, saveReviewer } from "@/lib/actions";
+import { formatDateTime, toLocalInput } from "@/lib/download";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
@@ -29,7 +31,25 @@ export function DepartmentPage() {
   return <QueryState query={query}>{(data) => <Department {...data} />}</QueryState>;
 }
 
-function Department({ department, editable, programmes, schemes, courses, reviewers, faculty }) {
+const syllabusVariant = { DRAFT: "warning", IN_REVIEW: "secondary", APPROVED: "success", REVISING: "warning" };
+
+/** "V2.1 · Industry Experts & Alumni" — where a course's syllabus stands. */
+function SyllabusStatus({ syllabus }) {
+  if (!syllabus) return <span className="text-xs text-muted-foreground">Not started</span>;
+  return (
+    <div className="space-y-0.5">
+      <Badge variant={syllabusVariant[syllabus.status]}>{syllabusStatusLabels[syllabus.status]}</Badge>
+      {syllabus.label && (
+        <div className="text-xs text-muted-foreground">
+          {syllabus.label}
+          {syllabus.status === "IN_REVIEW" && ` · ${stageLabels[syllabus.stage]}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Department({ department, editable, programmes, schemes, courses, reviewers, faculty, meetings }) {
   const assignmentFields = [
     {
       name: "userId",
@@ -50,6 +70,7 @@ function Department({ department, editable, programmes, schemes, courses, review
         <TabsList className="flex-wrap">
           <TabsTrigger value="courses">Courses &amp; faculty</TabsTrigger>
           <TabsTrigger value="lists">Programme course lists</TabsTrigger>
+          <TabsTrigger value="meetings">Meetings</TabsTrigger>
           <TabsTrigger value="reviewers">Reviewers</TabsTrigger>
           <TabsTrigger value="faculty">Faculty</TabsTrigger>
         </TabsList>
@@ -70,6 +91,7 @@ function Department({ department, editable, programmes, schemes, courses, review
                     <TableHead>Scheme · Sem</TableHead>
                     <TableHead>Programmes</TableHead>
                     <TableHead>Faculty</TableHead>
+                    <TableHead>Syllabus</TableHead>
                     {editable && <TableHead className="w-0" />}
                   </TableRow>
                 </TableHeader>
@@ -111,6 +133,9 @@ function Department({ department, editable, programmes, schemes, courses, review
                             </li>
                           ))}
                         </ul>
+                      </TableCell>
+                      <TableCell>
+                        <SyllabusStatus syllabus={c.syllabus} />
                       </TableCell>
                       {editable && (
                         <TableCell>
@@ -170,6 +195,16 @@ function Department({ department, editable, programmes, schemes, courses, review
               ))}
             </ul>
           )}
+        </TabsContent>
+
+        <TabsContent value="meetings" className="space-y-3 pt-4">
+          <Meetings
+            department={department}
+            editable={editable}
+            meetings={meetings}
+            schemes={schemes}
+            reviewers={reviewers}
+          />
         </TabsContent>
 
         <TabsContent value="reviewers" className="space-y-3 pt-4">
@@ -273,6 +308,134 @@ function Department({ department, editable, programmes, schemes, courses, review
           )}
         </TabsContent>
       </Tabs>
+    </>
+  );
+}
+
+/** BOS meetings and expert sessions. Inputs recorded on a syllabus refer to one of them. */
+function Meetings({ department, editable, meetings, schemes, reviewers }) {
+  const published = schemes.filter((s) => s.status === "PUBLISHED");
+  const fields = [
+    {
+      name: "schemeId",
+      label: "Scheme",
+      type: "select",
+      options: published.map((s) => ({ value: s.id, label: s.name })),
+      width: "half",
+    },
+    {
+      name: "stage",
+      label: "Stage",
+      type: "select",
+      options: Object.entries(stageLabels).map(([value, label]) => ({ value, label })),
+      width: "half",
+    },
+    { name: "heldAt", label: "Date and time", type: "datetime-local", width: "half" },
+    { name: "venue", label: "Venue", type: "text", width: "half" },
+    {
+      name: "title",
+      label: "Title (optional)",
+      type: "text",
+      placeholder: "e.g. BOS meeting, semester III–IV syllabi",
+    },
+    {
+      name: "attendeeIds",
+      label: "Reviewers present",
+      type: "multiselect",
+      options: reviewers.filter((r) => r.isActive).map((r) => ({ value: r.id, label: r.name })),
+      description: reviewers.length ? undefined : "Add reviewers in the Reviewers tab first.",
+    },
+  ];
+  const blank = {
+    schemeId: published[0]?.id ?? "",
+    stage: "INTERNAL_BOS",
+    heldAt: "",
+    venue: "",
+    title: "",
+    attendeeIds: [],
+  };
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          One meeting can review many syllabi. Inputs are then recorded course by course on each syllabus&apos;s review
+          page, and the meeting&apos;s date, time and venue are printed in the Action Taken report.
+        </p>
+        {editable && (
+          <EntityFormDialog
+            schema="reviewMeeting"
+            title="Add meeting"
+            fields={fields}
+            defaultValues={blank}
+            action={saveMeeting.bind(null, department.code, null)}
+            trigger={<Button>Add meeting</Button>}
+          />
+        )}
+      </div>
+      {meetings.length === 0 ? (
+        <EmptyState>No meetings yet.</EmptyState>
+      ) : (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When and where</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Reviewers present</TableHead>
+                <TableHead>Inputs</TableHead>
+                {editable && <TableHead className="w-0" />}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {meetings.map((m) => (
+                <TableRow key={m.id} className="align-top">
+                  <TableCell className="whitespace-normal">
+                    <div className="font-medium">{formatDateTime(m.heldAt)}</div>
+                    <div className="text-sm">
+                      {m.venue}
+                      {m.title ? ` · ${m.title}` : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{m.schemeName}</div>
+                  </TableCell>
+                  <TableCell>{stageLabels[m.stage]}</TableCell>
+                  <TableCell className="whitespace-normal text-sm">
+                    {m.attendees.map((a) => a.name).join(", ") || "—"}
+                  </TableCell>
+                  <TableCell>{m.inputCount}</TableCell>
+                  {editable && (
+                    <TableCell>
+                      <EntityFormDialog
+                        schema="reviewMeeting"
+                        title="Edit meeting"
+                        fields={fields.map((f) =>
+                          m.inputCount > 0 && (f.name === "schemeId" || f.name === "stage")
+                            ? { ...f, disabled: true }
+                            : f,
+                        )}
+                        defaultValues={{
+                          schemeId: m.schemeId,
+                          stage: m.stage,
+                          heldAt: toLocalInput(m.heldAt),
+                          venue: m.venue,
+                          title: m.title ?? "",
+                          attendeeIds: m.attendees.map((a) => a.id),
+                        }}
+                        action={saveMeeting.bind(null, department.code, m.id)}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            Edit
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </>
   );
 }

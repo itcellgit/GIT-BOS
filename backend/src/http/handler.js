@@ -24,7 +24,7 @@ export function zodFieldErrors(error) {
  * sends `{ ok: true, data, message }`. Expected errors become 4xx JSON; others are logged (500).
  * @param {import("zod").ZodType | null} schema
  * @param {(data: any, req: import("express").Request, res: import("express").Response) => Promise<any>} fn
- * @param {string} [message] success message shown to the user
+ * @param {string} [message] success message shown to the user (a route may set res.locals.message instead)
  */
 export function handle(schema, fn, message) {
   return async (req, res) => {
@@ -42,7 +42,7 @@ export function handle(schema, fn, message) {
     }
     try {
       const result = await fn(data, req, res);
-      if (!res.headersSent) res.json({ ok: true, data: result ?? null, message });
+      if (!res.headersSent) res.json({ ok: true, data: result ?? null, message: res.locals.message ?? message });
     } catch (e) {
       sendError(res, e);
     }

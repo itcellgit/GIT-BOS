@@ -2,6 +2,7 @@
 // AND by the Server Actions (authoritative check), so each rule is written once.
 import { z } from "zod";
 import { initialPasswordSchema } from "./account.js";
+import { reviewFormSchemas } from "./review.js";
 const requiredText = (label, max = 200) =>
   z.string().trim().min(1, `${label} is required`).max(max, `${label} is too long`);
 const optionalText = (max = 500) =>
@@ -235,4 +236,5 @@ export const formSchemas = {
   reviewer: reviewerSchema,
   courseAssignment: courseAssignmentSchema,
   initialPassword: initialPasswordSchema,
+  ...reviewFormSchemas,
 };

@@ -35,6 +35,12 @@ model User {
   courseAssignments CourseAssignment[]
   auditLogs         AuditLog[]
   syllabiEdited     Syllabus[]
+  versionsCreated   SyllabusVersion[]
+  meetingsCreated   ReviewMeeting[]
+  inputsRecorded    ReviewInput[]      @relation("InputRecorder")
+  inputsAnswered    ReviewInput[]      @relation("InputResponder")
+  unlocks           SyllabusUnlock[]
+  approvals         SyllabusApproval[]
 
   @@map("user")
 }
@@ -145,6 +151,7 @@ model Department {
   ownedCourses    Course[]         @relation("CourseOwner")
   teachingCourses SchemeCourse[]   @relation("TeachingDepartment")
   reviewers       Reviewer[]
+  reviewMeetings  ReviewMeeting[]
 
   @@map("department")
 }
@@ -206,6 +213,7 @@ model Scheme {
   electiveGroups ElectiveGroup[]
   assignments    CourseAssignment[]
   syllabi        Syllabus[]
+  reviewMeetings ReviewMeeting[]
 
   @@map("scheme")
 }
@@ -453,28 +461,178 @@ model CourseAssignment {
 // --- Syllabi (Phase 1) ------------------------------------------------------------------
 
 enum SyllabusStatus {
-  DRAFT // faculty are framing it; Phase 2 adds submission and the review stages
+  DRAFT // faculty are framing it; not submitted yet
+  IN_REVIEW // V1.0 or later, in one of the review stages (`stage`)
+  APPROVED // V4.x approved by the Academic Council; the working copy is locked
+  REVISING // unlocked after approval (D5); the approved version stays official until re-approved
+}
+
+/// Review stages in order (README §7).
+enum ReviewStage {
+  INTERNAL_BOS
+  EXPERT
+  EXTERNAL_BOS
+  ACADEMIC_COUNCIL
 }
 
 // One syllabus per (scheme, course): it serves every programme that lists the course (D13, Q1).
-// `content` is the editable working copy (README §6); immutable versions arrive in Phase 2.
+// `content` is the editable working copy (README §6); each commit freezes it as a SyllabusVersion.
 model Syllabus {
-  id          String         @id @default(cuid())
-  schemeId    String
-  scheme      Scheme         @relation(fields: [schemeId], references: [id], onDelete: Restrict)
-  courseId    String
-  course      Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  format      SyllabusFormat
-  status      SyllabusStatus @default(DRAFT)
-  content     Json
-  revision    Int            @default(1) // bumped on every save; autosave sends it back to detect conflicts
-  updatedById String?
-  updatedBy   User?          @relation(fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                String           @id @default(cuid())
+  schemeId          String
+  scheme            Scheme           @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  courseId          String
+  course            Course           @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  format            SyllabusFormat
+  status            SyllabusStatus   @default(DRAFT)
+  stage             ReviewStage? // current review stage while IN_REVIEW
+  content           Json
+  revision          Int              @default(1) // bumped on every save; autosave sends it back to detect conflicts
+  /// Latest version number (0.0 = not submitted).
+  majorVersion      Int              @default(0)
+  minorVersion      Int              @default(0)
+  /// Working-copy revision frozen in the latest version: a different `revision` means uncommitted changes.
+  committedRevision Int?
+  /// The approved version in force (README §7, rule 5).
+  officialVersionId String?          @unique
+  officialVersion   SyllabusVersion? @relation("OfficialVersion", fields: [officialVersionId], references: [id], onDelete: Restrict)
+  updatedById       String?
+  updatedBy         User?            @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  versions  SyllabusVersion[]
+  inputs    ReviewInput[]
+  unlocks   SyllabusUnlock[]
+  approvals SyllabusApproval[]
 
   @@unique([schemeId, courseId])
   @@map("syllabus")
+}
+
+enum VersionSource {
+  SUBMIT // first submission: V1.0
+  COMMIT // "save version" within a stage: next minor
+  CLOSE_STAGE // closing a stage: V2.0 / V3.0 / V4.0 (or a minor when the expert stage closes)
+  APPROVE // re-approval after an unlock, with uncommitted changes
+}
+
+/// An immutable snapshot of the working copy (README §7, rule 1). Never updated or deleted.
+model SyllabusVersion {
+  id          String        @id @default(cuid())
+  syllabusId  String
+  syllabus    Syllabus      @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  major       Int
+  minor       Int
+  label       String // "V2.1"
+  /// Stage the syllabus is in with this version (null once V4.x is final).
+  stage       ReviewStage?
+  source      VersionSource
+  reason      String?
+  content     Json
+  revision    Int // working-copy revision it was taken from
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+
+  officialFor     Syllabus?          @relation("OfficialVersion")
+  reviewedInputs  ReviewInput[]      @relation("ReviewedVersion")
+  resultingInputs ReviewInput[]      @relation("ResultingVersion")
+  approvals       SyllabusApproval[]
+
+  @@unique([syllabusId, major, minor])
+  @@map("syllabus_version")
+}
+
+/// A BOS meeting (or expert review session). One meeting can review many syllabi (README §7, rule 7).
+model ReviewMeeting {
+  id           String      @id @default(cuid())
+  departmentId String
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  schemeId     String
+  scheme       Scheme      @relation(fields: [schemeId], references: [id], onDelete: Restrict)
+  stage        ReviewStage
+  title        String?
+  heldAt       DateTime
+  venue        String
+  attendees    Reviewer[]  @relation("MeetingAttendees")
+  createdById  String?
+  createdBy    User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  inputs ReviewInput[]
+
+  @@index([departmentId, schemeId])
+  @@map("review_meeting")
+}
+
+enum InputDecision {
+  ACCEPTED
+  PARTLY
+  NOT_ACCEPTED
+}
+
+/// One reviewer input against one section of the version reviewed (README §7, rule 2).
+model ReviewInput {
+  id                 String           @id @default(cuid())
+  syllabusId         String
+  syllabus           Syllabus         @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  stage              ReviewStage
+  reviewedVersionId  String
+  reviewedVersion    SyllabusVersion  @relation("ReviewedVersion", fields: [reviewedVersionId], references: [id], onDelete: Restrict)
+  meetingId          String?
+  meeting            ReviewMeeting?   @relation(fields: [meetingId], references: [id], onDelete: Restrict)
+  sectionRef         String // e.g. "unit:3", "co:2", "books"
+  inputText          String
+  givenById          String?
+  givenBy            Reviewer?        @relation(fields: [givenById], references: [id], onDelete: Restrict)
+  actionTaken        String?
+  decision           InputDecision?
+  respondedById      String?
+  respondedBy        User?            @relation("InputResponder", fields: [respondedById], references: [id], onDelete: SetNull)
+  resultingVersionId String?
+  resultingVersion   SyllabusVersion? @relation("ResultingVersion", fields: [resultingVersionId], references: [id], onDelete: Restrict)
+  createdById        String?
+  createdBy          User?            @relation("InputRecorder", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([syllabusId, stage])
+  @@map("review_input")
+}
+
+/// Unlocking an approved syllabus (D5). Shown as a row in the Action Taken report.
+model SyllabusUnlock {
+  id          String      @id @default(cuid())
+  syllabusId  String
+  syllabus    Syllabus    @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  stage       ReviewStage @default(ACADEMIC_COUNCIL)
+  fromLabel   String // version in force when unlocked, e.g. "V4.0"
+  reason      String
+  createdById String?
+  createdBy   User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+
+  @@index([syllabusId])
+  @@map("syllabus_unlock")
+}
+
+/// The Academic Council decision for a version (README §7, rule 4).
+model SyllabusApproval {
+  id           String          @id @default(cuid())
+  syllabusId   String
+  syllabus     Syllabus        @relation(fields: [syllabusId], references: [id], onDelete: Restrict)
+  versionId    String
+  version      SyllabusVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  approvedOn   DateTime        @db.Date
+  reference    String
+  recordedById String?
+  recordedBy   User?           @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+
+  @@index([syllabusId])
+  @@map("syllabus_approval")
 }
 
 enum ReviewerCategory {
@@ -499,6 +657,9 @@ model Reviewer {
   isActive     Boolean          @default(true)
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
+
+  inputs   ReviewInput[]
+  meetings ReviewMeeting[] @relation("MeetingAttendees")
 
   @@index([departmentId])
   @@map("reviewer")

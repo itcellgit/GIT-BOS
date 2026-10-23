@@ -52,6 +52,13 @@ describe("syllabi", () => {
     expect(can(actor({ role: "BOS_COORDINATOR", departmentId: CSE }), "syllabus.edit", cseCourse)).toBe(true);
     expect(can(actor({ role: "BOS_COORDINATOR", departmentId: MECH }), "syllabus.edit", cseCourse)).toBe(false);
   });
+  it("lets only the owning department's BoS Coordinator run the review (inputs, stages, unlock)", () => {
+    expect(can(actor({ role: "BOS_COORDINATOR", departmentId: CSE }), "syllabus.review", cseCourse)).toBe(true);
+    expect(can(actor({ role: "BOS_COORDINATOR", departmentId: MECH }), "syllabus.review", cseCourse)).toBe(false);
+    expect(can(actor({ role: "FACULTY", departmentId: CSE }), "syllabus.review", own)).toBe(false);
+    expect(can(actor({ role: "HOD", departmentId: CSE }), "syllabus.review", cseCourse)).toBe(false);
+    expect(can(actor({ role: "DEAN_ACADEMICS", departmentId: null }), "syllabus.review", cseCourse)).toBe(false);
+  });
   it("gives read-only access to the HoD and Dean Academics, and none to the Administrator", () => {
     for (const reader of [
       actor({ role: "HOD", departmentId: CSE }),

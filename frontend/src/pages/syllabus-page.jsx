@@ -3,7 +3,13 @@ import { useNavigate, useParams } from "react-router";
 import { AlertTriangle, Check, CloudOff, FileText, Loader2 } from "lucide-react";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { theoryTotals } from "@acp/shared/domain/syllabi/theory";
-import { issuesBySection, validateTheory, validationContext } from "@acp/shared/domain/syllabi/validate";
+import {
+  issuesBySection,
+  summarizeIssues,
+  validateTheory,
+  validationContext,
+} from "@acp/shared/domain/syllabi/validate";
+import { syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
 import { assignmentRoleLabels, textBlockKindLabels } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -11,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
 import { ChecksPanel, SectionIssueCount } from "@/components/syllabus/checks-panel";
+import { WorkflowBar } from "@/components/syllabus/workflow-bar";
 import {
   BooksSection,
   FlippedSection,
@@ -78,6 +85,16 @@ function Editor({ path, data }) {
   // The same rules the API runs (README §9), re-checked on every change.
   const issues = useMemo(() => (content ? validateTheory(content, validationContext(data)) : []), [content, data]);
   const counts = useMemo(() => issuesBySection(issues), [issues]);
+  // The server's workflow state, plus what changed on screen since it was loaded.
+  const workflow = useMemo(() => {
+    const edited = JSON.stringify(content) !== JSON.stringify(data.syllabus.content);
+    return {
+      ...data.workflow,
+      saved: data.workflow.saved || edited,
+      hasUncommittedChanges: data.workflow.hasUncommittedChanges || (edited && data.workflow.status !== "DRAFT"),
+      errorCount: summarizeIssues(issues).errors,
+    };
+  }, [content, data, issues]);
   const navigate = useNavigate();
   const openPreview = async () => {
     if (data.canEdit) await autosave.saveNow(); // the preview and PDF show the saved copy
@@ -97,7 +114,8 @@ function Editor({ path, data }) {
             <span>· {data.offerings.map((o) => o.programme.code).join(", ")}</span>
             <span>· Semester {first.semester}</span>
             {data.format && <Badge variant="secondary">{formatLabels[data.format.format]}</Badge>}
-            <Badge variant={data.canEdit ? "warning" : "outline"}>{data.canEdit ? "Draft" : "Read-only"}</Badge>
+            <Badge variant="outline">{syllabusStatusLabels[data.workflow.status]}</Badge>
+            {!data.canEdit && <Badge variant="outline">Read-only</Badge>}
           </span>
         }
         actions={
@@ -121,7 +139,18 @@ function Editor({ path, data }) {
         }
       />
 
-      {data.lockedReason && (
+      {data.format && data.syllabus.content && (
+        <WorkflowBar
+          path={path}
+          data={data}
+          state={workflow}
+          beforeAction={async () => {
+            if (data.canEdit) await autosave.saveNow();
+          }}
+        />
+      )}
+
+      {data.lockedReason && data.workflow.status !== "APPROVED" && (
         <Alert className="mb-6">
           <AlertTitle>Read-only</AlertTitle>
           <AlertDescription>{data.lockedReason}</AlertDescription>

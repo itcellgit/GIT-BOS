@@ -98,7 +98,7 @@ export function EntityFormDialog({
               <Fragment key={f.name}>
                 <div className={cn("space-y-1.5", span)}>
                   {f.type !== "checkbox" && <Label htmlFor={id}>{f.label}</Label>}
-                  {(f.type === "text" || f.type === "email" || f.type === "number" || f.type === "password") && (
+                  {["text", "email", "number", "password", "date", "datetime-local"].includes(f.type) && (
                     <Input
                       id={id}
                       type={f.type}

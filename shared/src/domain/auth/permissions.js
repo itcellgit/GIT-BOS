@@ -42,8 +42,11 @@ export function can(actor, action, resource = {}) {
       return dept !== null && (hasRole(actor, "BOS_COORDINATOR", dept) || hasRole(actor, "HOD", dept));
     // Syllabi: resource = { departmentId: owning department of the course, isAssigned: actor is its
     // Course Coordinator or a co-author in that scheme }.
-    case "syllabus.edit":
+    case "syllabus.edit": // also: submit, save a version, record the action taken on an input
       return !!resource.isAssigned || (dept !== null && hasRole(actor, "BOS_COORDINATOR", dept));
+    // Phase 2 (README §4): record meeting inputs, close a stage, record approval, unlock (D3, D5).
+    case "syllabus.review":
+      return dept !== null && hasRole(actor, "BOS_COORDINATOR", dept);
     case "syllabus.view":
       if (isDean || resource.isAssigned) return true;
       return dept !== null && (hasRole(actor, "BOS_COORDINATOR", dept) || hasRole(actor, "HOD", dept));

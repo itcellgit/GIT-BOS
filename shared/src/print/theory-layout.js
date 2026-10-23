@@ -81,7 +81,7 @@ ${fontFaces(fontUrl)}
   @bottom-left { content: ${cssString(footerLeft)}; font: 8pt Carlito, Calibri, sans-serif; color: #555; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Carlito, Calibri, sans-serif; color: #555; }
 }
-${css}
+${baseCss}
 </style>
 </head>
 <body>
@@ -346,13 +346,13 @@ function multiline(text) {
 }
 
 /** A CSS string literal (for @page margin boxes). */
-function cssString(value) {
+export function cssString(value) {
   return `"${String(value)
     .replace(/[\\"]/g, "\\$&")
     .replace(/[\r\n]+/g, " ")}"`;
 }
 
-function fontFaces(fontUrl) {
+export function fontFaces(fontUrl) {
   const face = (weight, style, file) =>
     `@font-face { font-family: Carlito; font-weight: ${weight}; font-style: ${style}; src: url("${fontUrl(file)}") format("woff2"); }`;
   return [
@@ -363,7 +363,7 @@ function fontFaces(fontUrl) {
   ].join("\n");
 }
 
-const css = `
+export const baseCss = `
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; font-family: Carlito, Calibri, "Segoe UI", sans-serif; font-size: 11pt; line-height: 1.25; color: #000; }

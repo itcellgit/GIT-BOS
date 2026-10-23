@@ -13,6 +13,7 @@ import { SchemePage } from "@/pages/scheme-page";
 import { SchemesPage } from "@/pages/schemes-page";
 import { SyllabusPage } from "@/pages/syllabus-page";
 import { SyllabusPreviewPage } from "@/pages/syllabus-preview-page";
+import { SyllabusReviewPage } from "@/pages/syllabus-review-page";
 
 export function App() {
   return (
@@ -32,6 +33,7 @@ export function App() {
           <Route path="schemes/:schemeId/programmes/:programmeId" element={<CourseListPage />} />
           <Route path="syllabi/:schemeId/:courseId" element={<SyllabusPage />} />
           <Route path="syllabi/:schemeId/:courseId/preview" element={<SyllabusPreviewPage />} />
+          <Route path="syllabi/:schemeId/:courseId/review" element={<SyllabusReviewPage />} />
           <Route path="departments/:code" element={<DepartmentPage />} />
           <Route path="admin/users" element={<AdminUsersPage />} />
           <Route path="admin/departments" element={<AdminDepartmentsPage />} />

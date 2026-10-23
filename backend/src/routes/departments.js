@@ -2,7 +2,9 @@
 // and the department's faculty. Mounted at /api/departments
 import { Router } from "express";
 import { can } from "@acp/shared/domain/auth/permissions";
+import { versionLabel } from "@acp/shared/domain/reviews/workflow";
 import { courseAssignmentSchema, reviewerSchema } from "@acp/shared/schemas/config";
+import { reviewMeetingSchema } from "@acp/shared/schemas/review";
 import { assertPermission, assertSignedIn } from "../auth/session.js";
 import { NotFoundError, PermissionError, UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
@@ -24,7 +26,7 @@ departmentsRouter.get(
     const department = await findDepartment(req.params.code);
     if (!can(user, "department.view", { departmentId: department.id })) throw new PermissionError();
 
-    const [programmes, schemes, ownedRows, assignments, reviewers, faculty] = await Promise.all([
+    const [programmes, schemes, ownedRows, assignments, reviewers, faculty, syllabi, meetings] = await Promise.all([
       db.programme.findMany({ where: { departmentId: department.id, isActive: true }, orderBy: { code: "asc" } }),
       db.scheme.findMany({ where: { status: { not: "RETIRED" } }, orderBy: { code: "desc" } }),
       // Courses this department owns, in published schemes, across all programmes that list them.
@@ -51,6 +53,19 @@ departmentsRouter.get(
         orderBy: { name: "asc" },
         select: { id: true, name: true, designation: true },
       }),
+      db.syllabus.findMany({
+        where: { course: { owningDepartmentId: department.id }, scheme: { status: "PUBLISHED" } },
+        select: { schemeId: true, courseId: true, status: true, stage: true, majorVersion: true, minorVersion: true },
+      }),
+      db.reviewMeeting.findMany({
+        where: { departmentId: department.id },
+        orderBy: { heldAt: "desc" },
+        include: {
+          scheme: { select: { name: true } },
+          attendees: { select: { id: true, name: true } },
+          _count: { select: { inputs: true } },
+        },
+      }),
     ]);
 
     // One line per (scheme, course): the same course may appear in several programmes.
@@ -70,6 +85,7 @@ departmentsRouter.get(
           format: r.format,
           programmes: [r.programme.code],
           assignments: assignments.filter((a) => a.schemeId === r.schemeId && a.courseId === r.courseId),
+          syllabus: syllabusSummary(syllabi.find((y) => y.schemeId === r.schemeId && y.courseId === r.courseId)),
         });
     }
 
@@ -81,9 +97,88 @@ departmentsRouter.get(
       courses: [...courses.values()],
       reviewers,
       faculty: faculty.map((f) => ({ ...f, courseCount: assignments.filter((a) => a.userId === f.id).length })),
+      meetings: meetings.map((m) => ({
+        id: m.id,
+        schemeId: m.schemeId,
+        schemeName: m.scheme.name,
+        stage: m.stage,
+        title: m.title,
+        heldAt: m.heldAt,
+        venue: m.venue,
+        attendees: m.attendees,
+        inputCount: m._count.inputs,
+      })),
     };
   }),
 );
+
+/** Where a course's syllabus stands, for the course table (null = not started). */
+function syllabusSummary(y) {
+  if (!y) return null;
+  return {
+    status: y.status,
+    stage: y.stage,
+    label: y.majorVersion > 0 ? versionLabel(y.majorVersion, y.minorVersion) : null,
+  };
+}
+
+// --- Review meetings (README §7, rule 7: one meeting can review many syllabi) ------------------------
+
+const saveMeeting = handle(
+  reviewMeetingSchema,
+  async ({ attendeeIds, heldAt, ...data }, req) => {
+    const department = await findDepartment(req.params.code);
+    const actor = assertPermission(req, "department.configure", { departmentId: department.id });
+    const meetingId = req.params.meetingId ?? null;
+    const [scheme, attendees, existing] = await Promise.all([
+      db.scheme.findUnique({ where: { id: data.schemeId } }),
+      db.reviewer.findMany({ where: { id: { in: attendeeIds }, departmentId: department.id } }),
+      meetingId
+        ? db.reviewMeeting.findUnique({ where: { id: meetingId }, include: { _count: { select: { inputs: true } } } })
+        : null,
+    ]);
+    if (!scheme || scheme.status !== "PUBLISHED")
+      throw new UserError("Choose a published scheme.", { schemeId: "Not a published scheme" });
+    if (attendees.length !== attendeeIds.length)
+      throw new UserError("Choose attendees from the department's reviewers.");
+    if (meetingId) {
+      if (!existing || existing.departmentId !== department.id) throw new NotFoundError("Meeting not found.");
+      if (existing._count.inputs > 0 && (existing.stage !== data.stage || existing.schemeId !== data.schemeId)) {
+        throw new UserError("Inputs are already recorded against this meeting, so its scheme and stage cannot change.");
+      }
+    }
+    // The form sends local time (India); store the moment it happened.
+    const when = new Date(/[zZ]|[+-]dd:?dd$/.test(heldAt) ? heldAt : `${heldAt}+05:30`);
+    await db.$transaction(async (tx) => {
+      const values = { ...data, heldAt: when, attendees: { set: attendees.map((a) => ({ id: a.id })) } };
+      const row = meetingId
+        ? await tx.reviewMeeting.update({ where: { id: meetingId }, data: values })
+        : await tx.reviewMeeting.create({
+            data: {
+              ...data,
+              heldAt: when,
+              departmentId: department.id,
+              createdById: actor.id,
+              attendees: { connect: attendees.map((a) => ({ id: a.id })) },
+            },
+          });
+      await writeAudit(
+        {
+          actorId: actor.id,
+          action: meetingId ? "meeting.update" : "meeting.create",
+          entityType: "ReviewMeeting",
+          entityId: row.id,
+          departmentId: department.id,
+          details: { stage: data.stage, heldAt: when.toISOString(), venue: data.venue },
+        },
+        tx,
+      );
+    });
+  },
+  "Meeting saved",
+);
+departmentsRouter.post("/:code/meetings", saveMeeting);
+departmentsRouter.put("/:code/meetings/:meetingId", saveMeeting);
 
 // --- Reviewer directory -------------------------------------------------------------
 

@@ -58,3 +58,19 @@ export const addAssignment = (departmentCode, schemeId, courseId, values) =>
   api.post(`/departments/${departmentCode}/schemes/${schemeId}/courses/${courseId}/assignments`, values);
 export const removeAssignment = (departmentCode, assignmentId) =>
   api.delete(`/departments/${departmentCode}/assignments/${assignmentId}`);
+// The meeting time is typed in the browser's time zone; send it as an exact moment.
+export const saveMeeting = (departmentCode, meetingId, { heldAt, ...values }) =>
+  save(`/departments/${departmentCode}/meetings`, meetingId, {
+    ...values,
+    heldAt: heldAt && !Number.isNaN(Date.parse(heldAt)) ? new Date(heldAt).toISOString() : heldAt,
+  });
+
+// --- Syllabus review workflow (Phase 2). `path` is "/syllabi/:schemeId/:courseId" -------------------------
+export const submitSyllabus = (path) => api.post(`${path}/submit`);
+export const commitVersion = (path, values) => api.post(`${path}/versions`, values);
+export const closeStage = (path, values) => api.post(`${path}/close`, values);
+export const unlockSyllabus = (path, values) => api.post(`${path}/unlock`, values);
+export const approveSyllabus = (path, values) => api.post(`${path}/approve`, values);
+export const saveReviewInput = (path, inputId, values) => save(`${path}/inputs`, inputId, values);
+export const deleteReviewInput = (path, inputId) => api.delete(`${path}/inputs/${inputId}`);
+export const saveActionTaken = (path, inputId, values) => api.put(`${path}/inputs/${inputId}/action`, values);

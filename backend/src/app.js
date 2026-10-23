@@ -11,6 +11,7 @@ import { courseListsRouter } from "./routes/course-lists.js";
 import { departmentsRouter } from "./routes/departments.js";
 import { meRouter } from "./routes/me.js";
 import { printRouter } from "./routes/print.js";
+import { reviewsRouter } from "./routes/reviews.js";
 import { schemesRouter } from "./routes/schemes.js";
 import { syllabiRouter } from "./routes/syllabi.js";
 
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/api/schemes/:schemeId/programmes/:programmeId", courseListsRouter);
   app.use("/api/schemes", schemesRouter);
   app.use("/api/departments", departmentsRouter);
+  app.use("/api/syllabi/:schemeId/:courseId", reviewsRouter);
   app.use("/api/syllabi", syllabiRouter);
   app.use("/api/print", printRouter);
   app.use("/api", (_req, res) => res.status(404).json({ ok: false, error: "Not found." }));
