@@ -37,7 +37,7 @@ test("faculty frame a Theory syllabus; changes are saved automatically", async (
 
 test("the HoD can read a syllabus but not change it", async ({ page }) => {
   await signIn(page, "hod.cse@example.edu");
-  await page.goto("/departments/CSE");
+  await page.goto("/departments/CSE?courses.q=1BCS304");
   await page.getByRole("link", { name: COURSE }).first().click();
   await expect(page.getByRole("heading", { name: COURSE })).toBeVisible();
   await expect(page.getByText("Read-only", { exact: true })).toBeVisible();
@@ -51,7 +51,7 @@ test("simultaneous edits never overwrite each other silently", async ({ page, br
   const context = await browser.newContext();
   const other = await context.newPage();
   await signIn(other, "bos.cse@example.edu");
-  await other.goto("/departments/CSE");
+  await other.goto("/departments/CSE?courses.q=1BCS304");
   await other.getByRole("link", { name: COURSE }).first().click();
   await expect(other.getByLabel("Unit – II", { exact: true })).toBeEditable();
 

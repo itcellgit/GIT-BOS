@@ -1,10 +1,13 @@
 import { Link, useParams } from "react-router";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
-import { stageLabels } from "@acp/shared/domain/reviews/workflow";
+import { stageLabels, stages, syllabusStatusLabels } from "@acp/shared/domain/reviews/workflow";
 import { assignmentRoleLabels, reviewerCategoryLabels, toOptions } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
+import { useDataTable } from "@/hooks/use-data-table";
+import { distinctOptions } from "@/lib/data-table";
 import { addAssignment, removeAssignment, saveMeeting, saveReviewer } from "@/lib/actions";
 import { formatDateTime, toLocalInput } from "@/lib/download";
+import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
@@ -72,7 +75,43 @@ function SyllabusStatus({ syllabus }) {
   );
 }
 
+/** Order of syllabus progress, for sorting the Syllabus column. */
+const statusOrder = { NOT_STARTED: 0, DRAFT: 1, IN_REVIEW: 2, REVISING: 3, APPROVED: 4 };
+const syllabusStatusOf = (c) => c.syllabus?.status ?? "NOT_STARTED";
+
 function Department({ department, editable, programmes, schemes, courses, reviewers, faculty, meetings }) {
+  const courseTable = useDataTable({
+    id: "courses",
+    rows: courses,
+    columns: {
+      code: { sortValue: (c) => c.code },
+      semester: { sortValue: (c) => c.semester },
+      faculty: { sortValue: (c) => c.assignments.map((a) => a.user.name).join(", ") || null },
+      syllabus: { sortValue: (c) => statusOrder[syllabusStatusOf(c)] },
+    },
+    searchText: (c) => [c.code, c.title, c.programmes.join(" "), ...c.assignments.map((a) => a.user.name)].join(" "),
+    filterDefs: {
+      scheme: (c, v) => c.schemeName === v,
+      semester: (c, v) => c.semester === Number(v),
+      format: (c, v) => c.format === v,
+      faculty: (c, v) => (v === "assigned" ? c.assignments.length > 0 : c.assignments.length === 0),
+      syllabus: (c, v) => syllabusStatusOf(c) === v,
+    },
+  });
+  const reviewerTable = useDataTable({
+    id: "reviewers",
+    rows: reviewers,
+    columns: {
+      name: { sortValue: (r) => r.name },
+      category: { sortValue: (r) => reviewerCategoryLabels[r.category] },
+    },
+    defaultSort: { key: "name", dir: "asc" },
+    searchText: (r) => [r.name, r.designation, r.organisation, r.email, r.phone].join(" "),
+    filterDefs: {
+      category: (r, v) => r.category === v,
+      status: (r, v) => (v === "active" ? r.isActive : !r.isActive),
+    },
+  });
   const assignmentFields = [
     {
       name: "userId",
@@ -121,97 +160,162 @@ function Department({ department, editable, programmes, schemes, courses, review
           {courses.length === 0 ? (
             <EmptyState>No courses owned by this department in a published scheme.</EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Course</TableHead>
-                    <TableHead>Scheme · Sem</TableHead>
-                    <TableHead>Programmes</TableHead>
-                    <TableHead>Faculty</TableHead>
-                    <TableHead>Syllabus</TableHead>
-                    {editable && <TableHead className="w-0" />}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {courses.map((c) => (
-                    <TableRow key={`${c.schemeId}:${c.courseId}`} className="align-top">
-                      <TableCell className="min-w-56 whitespace-normal">
-                        <Link
-                          className="font-medium text-primary underline-offset-4 hover:underline"
-                          to={`/syllabi/${c.schemeId}/${c.courseId}`}
-                        >
-                          {c.code}
-                        </Link>
-                        <div className="text-sm">{c.title}</div>
-                        {c.format && <div className="text-xs text-muted-foreground">{formatLabels[c.format]}</div>}
-                      </TableCell>
-                      <TableCell>
-                        {c.schemeName} · {c.semester}
-                      </TableCell>
-                      <TableCell>{c.programmes.join(", ")}</TableCell>
-                      <TableCell className="whitespace-normal">
-                        {c.assignments.length === 0 && (
-                          <Badge variant="warning">
-                            <UserX />
-                            Not assigned
-                          </Badge>
-                        )}
-                        <ul className="space-y-1">
-                          {c.assignments.map((a) => (
-                            <li key={a.id} className="flex items-center gap-1 text-sm">
-                              {a.user.name}
-                              <span className="text-xs text-muted-foreground">({assignmentRoleLabels[a.role]})</span>
-                              {editable && (
-                                <ConfirmActionButton
-                                  action={removeAssignment.bind(null, department.code, a.id)}
-                                  label="Remove assignment"
-                                  icon={X}
-                                  iconOnly
-                                  variant="ghost"
-                                  size="xs"
-                                  title="Remove assignment?"
-                                  description={`${a.user.name} will no longer be assigned to ${c.code}.`}
-                                  confirmLabel="Remove"
-                                />
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </TableCell>
-                      <TableCell>
-                        <SyllabusStatus syllabus={c.syllabus} />
-                      </TableCell>
-                      {editable && (
-                        <TableCell>
-                          <EntityFormDialog
-                            schema="courseAssignment"
-                            title={`Assign faculty — ${c.code}`}
-                            description={
-                              faculty.length === 0
-                                ? "No faculty members yet: ask the administrator to give people the Faculty role in this department."
-                                : undefined
-                            }
-                            fields={assignmentFields}
-                            defaultValues={{
-                              userId: "",
-                              role: c.assignments.some((a) => a.role === "COORDINATOR") ? "CO_AUTHOR" : "COORDINATOR",
-                            }}
-                            action={addAssignment.bind(null, department.code, c.schemeId, c.courseId)}
-                            submitLabel="Assign"
-                            trigger={
-                              <Button variant="outline" size="sm">
-                                <UserPlus />
-                                Assign
-                              </Button>
-                            }
-                          />
-                        </TableCell>
-                      )}
+            <div className="space-y-3">
+              <DataTableToolbar
+                table={courseTable}
+                noun="courses"
+                searchPlaceholder="Code, title, programme or faculty"
+                filters={[
+                  {
+                    key: "scheme",
+                    label: "Scheme",
+                    allLabel: "All schemes",
+                    options: distinctOptions(courses, (c) => c.schemeName),
+                  },
+                  {
+                    key: "semester",
+                    label: "Semester",
+                    allLabel: "All",
+                    width: "w-28",
+                    options: distinctOptions(
+                      courses,
+                      (c) => c.semester,
+                      (v) => `Sem ${v}`,
+                    ),
+                  },
+                  {
+                    key: "format",
+                    label: "Format",
+                    allLabel: "All formats",
+                    options: distinctOptions(
+                      courses,
+                      (c) => c.format,
+                      (v) => formatLabels[v],
+                    ),
+                  },
+                  {
+                    key: "faculty",
+                    label: "Faculty",
+                    allLabel: "Any",
+                    width: "w-36",
+                    options: [
+                      { value: "assigned", label: "Assigned" },
+                      { value: "unassigned", label: "Not assigned" },
+                    ],
+                  },
+                  {
+                    key: "syllabus",
+                    label: "Syllabus",
+                    allLabel: "Any status",
+                    options: [
+                      { value: "NOT_STARTED", label: "Not started" },
+                      ...Object.entries(syllabusStatusLabels).map(([value, label]) => ({ value, label })),
+                    ],
+                  },
+                ]}
+              />
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead table={courseTable} column="code">
+                        Course
+                      </SortableHead>
+                      <SortableHead table={courseTable} column="semester">
+                        Scheme · Sem
+                      </SortableHead>
+                      <TableHead>Programmes</TableHead>
+                      <SortableHead table={courseTable} column="faculty">
+                        Faculty
+                      </SortableHead>
+                      <SortableHead table={courseTable} column="syllabus">
+                        Syllabus
+                      </SortableHead>
+                      {editable && <TableHead className="w-0" />}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {courseTable.total === 0 && <NoResultsRow table={courseTable} colSpan={editable ? 6 : 5} />}
+                    {courseTable.rows.map((c) => (
+                      <TableRow key={`${c.schemeId}:${c.courseId}`} className="align-top">
+                        <TableCell className="min-w-56 whitespace-normal">
+                          <Link
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                            to={`/syllabi/${c.schemeId}/${c.courseId}`}
+                          >
+                            {c.code}
+                          </Link>
+                          <div className="text-sm">{c.title}</div>
+                          {c.format && <div className="text-xs text-muted-foreground">{formatLabels[c.format]}</div>}
+                        </TableCell>
+                        <TableCell>
+                          {c.schemeName} · {c.semester}
+                        </TableCell>
+                        <TableCell>{c.programmes.join(", ")}</TableCell>
+                        <TableCell className="whitespace-normal">
+                          {c.assignments.length === 0 && (
+                            <Badge variant="warning">
+                              <UserX />
+                              Not assigned
+                            </Badge>
+                          )}
+                          <ul className="space-y-1">
+                            {c.assignments.map((a) => (
+                              <li key={a.id} className="flex items-center gap-1 text-sm">
+                                {a.user.name}
+                                <span className="text-xs text-muted-foreground">({assignmentRoleLabels[a.role]})</span>
+                                {editable && (
+                                  <ConfirmActionButton
+                                    action={removeAssignment.bind(null, department.code, a.id)}
+                                    label="Remove assignment"
+                                    icon={X}
+                                    iconOnly
+                                    variant="ghost"
+                                    size="xs"
+                                    title="Remove assignment?"
+                                    description={`${a.user.name} will no longer be assigned to ${c.code}.`}
+                                    confirmLabel="Remove"
+                                  />
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </TableCell>
+                        <TableCell>
+                          <SyllabusStatus syllabus={c.syllabus} />
+                        </TableCell>
+                        {editable && (
+                          <TableCell>
+                            <EntityFormDialog
+                              schema="courseAssignment"
+                              title={`Assign faculty — ${c.code}`}
+                              description={
+                                faculty.length === 0
+                                  ? "No faculty members yet: ask the administrator to give people the Faculty role in this department."
+                                  : undefined
+                              }
+                              fields={assignmentFields}
+                              defaultValues={{
+                                userId: "",
+                                role: c.assignments.some((a) => a.role === "COORDINATOR") ? "CO_AUTHOR" : "COORDINATOR",
+                              }}
+                              action={addAssignment.bind(null, department.code, c.schemeId, c.courseId)}
+                              submitLabel="Assign"
+                              trigger={
+                                <Button variant="outline" size="sm">
+                                  <UserPlus />
+                                  Assign
+                                </Button>
+                              }
+                            />
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <DataTablePagination table={courseTable} />
+              </div>
             </div>
           )}
         </TabsContent>
@@ -286,55 +390,93 @@ function Department({ department, editable, programmes, schemes, courses, review
           {reviewers.length === 0 ? (
             <EmptyState>No reviewers yet.</EmptyState>
           ) : (
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Designation and organisation</TableHead>
-                    <TableHead>Contact</TableHead>
-                    {editable && <TableHead className="w-0" />}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reviewers.map((r) => (
-                    <TableRow key={r.id} className={r.isActive ? undefined : "opacity-60"}>
-                      <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell>{reviewerCategoryLabels[r.category]}</TableCell>
-                      <TableCell className="whitespace-normal">
-                        {[r.designation, r.organisation].filter(Boolean).join(", ") || "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">{[r.email, r.phone].filter(Boolean).join(" · ") || "—"}</TableCell>
-                      {editable && (
-                        <TableCell>
-                          <EntityFormDialog
-                            schema="reviewer"
-                            title="Edit reviewer"
-                            fields={reviewerFields}
-                            defaultValues={{
-                              name: r.name,
-                              category: r.category,
-                              designation: r.designation ?? "",
-                              organisation: r.organisation ?? "",
-                              email: r.email ?? "",
-                              phone: r.phone ?? "",
-                              isActive: r.isActive,
-                            }}
-                            action={saveReviewer.bind(null, department.code, r.id)}
-                            trigger={
-                              <Button variant="outline" size="sm">
-                                <Pencil />
-                                Edit
-                              </Button>
-                            }
-                          />
-                        </TableCell>
-                      )}
+            <div className="space-y-3">
+              <DataTableToolbar
+                table={reviewerTable}
+                noun="reviewers"
+                searchPlaceholder="Name, organisation, email or phone"
+                filters={[
+                  {
+                    key: "category",
+                    label: "Category",
+                    allLabel: "All categories",
+                    width: "w-48",
+                    options: distinctOptions(
+                      reviewers,
+                      (r) => r.category,
+                      (v) => reviewerCategoryLabels[v],
+                    ),
+                  },
+                  {
+                    key: "status",
+                    label: "Status",
+                    allLabel: "Active and inactive",
+                    width: "w-44",
+                    options: [
+                      { value: "active", label: "Active" },
+                      { value: "inactive", label: "Inactive" },
+                    ],
+                  },
+                ]}
+              />
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead table={reviewerTable} column="name">
+                        Name
+                      </SortableHead>
+                      <SortableHead table={reviewerTable} column="category">
+                        Category
+                      </SortableHead>
+                      <TableHead>Designation and organisation</TableHead>
+                      <TableHead>Contact</TableHead>
+                      {editable && <TableHead className="w-0" />}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {reviewerTable.total === 0 && <NoResultsRow table={reviewerTable} colSpan={editable ? 5 : 4} />}
+                    {reviewerTable.rows.map((r) => (
+                      <TableRow key={r.id} className={r.isActive ? undefined : "opacity-60"}>
+                        <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell>{reviewerCategoryLabels[r.category]}</TableCell>
+                        <TableCell className="whitespace-normal">
+                          {[r.designation, r.organisation].filter(Boolean).join(", ") || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {[r.email, r.phone].filter(Boolean).join(" · ") || "—"}
+                        </TableCell>
+                        {editable && (
+                          <TableCell>
+                            <EntityFormDialog
+                              schema="reviewer"
+                              title="Edit reviewer"
+                              fields={reviewerFields}
+                              defaultValues={{
+                                name: r.name,
+                                category: r.category,
+                                designation: r.designation ?? "",
+                                organisation: r.organisation ?? "",
+                                email: r.email ?? "",
+                                phone: r.phone ?? "",
+                                isActive: r.isActive,
+                              }}
+                              action={saveReviewer.bind(null, department.code, r.id)}
+                              trigger={
+                                <Button variant="outline" size="sm">
+                                  <Pencil />
+                                  Edit
+                                </Button>
+                              }
+                            />
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <DataTablePagination table={reviewerTable} />
+              </div>
             </div>
           )}
         </TabsContent>
@@ -366,6 +508,21 @@ function Department({ department, editable, programmes, schemes, courses, review
 
 /** BOS meetings and expert sessions. Inputs recorded on a syllabus refer to one of them. */
 function Meetings({ department, editable, meetings, schemes, reviewers }) {
+  const table = useDataTable({
+    id: "meetings",
+    rows: meetings,
+    columns: {
+      when: { sortValue: (m) => new Date(m.heldAt), firstDir: "desc" },
+      stage: { sortValue: (m) => stages.indexOf(m.stage) },
+      inputs: { sortValue: (m) => m.inputCount, firstDir: "desc" },
+    },
+    defaultSort: { key: "when", dir: "desc" },
+    searchText: (m) => [m.venue, m.title, m.schemeName, ...m.attendees.map((a) => a.name)].join(" "),
+    filterDefs: {
+      scheme: (m, v) => m.schemeName === v,
+      stage: (m, v) => m.stage === v,
+    },
+  });
   const published = schemes.filter((s) => s.status === "PUBLISHED");
   const fields = [
     {
@@ -433,65 +590,97 @@ function Meetings({ department, editable, meetings, schemes, reviewers }) {
       {meetings.length === 0 ? (
         <EmptyState>No meetings yet.</EmptyState>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When and where</TableHead>
-                <TableHead>Stage</TableHead>
-                <TableHead>Reviewers present</TableHead>
-                <TableHead>Inputs</TableHead>
-                {editable && <TableHead className="w-0" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {meetings.map((m) => (
-                <TableRow key={m.id} className="align-top">
-                  <TableCell className="whitespace-normal">
-                    <div className="font-medium">{formatDateTime(m.heldAt)}</div>
-                    <div className="text-sm">
-                      {m.venue}
-                      {m.title ? ` · ${m.title}` : ""}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{m.schemeName}</div>
-                  </TableCell>
-                  <TableCell>{stageLabels[m.stage]}</TableCell>
-                  <TableCell className="whitespace-normal text-sm">
-                    {m.attendees.map((a) => a.name).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell>{m.inputCount}</TableCell>
-                  {editable && (
-                    <TableCell>
-                      <EntityFormDialog
-                        schema="reviewMeeting"
-                        title="Edit meeting"
-                        fields={fields.map((f) =>
-                          m.inputCount > 0 && (f.name === "schemeId" || f.name === "stage")
-                            ? { ...f, disabled: true }
-                            : f,
-                        )}
-                        defaultValues={{
-                          schemeId: m.schemeId,
-                          stage: m.stage,
-                          heldAt: toLocalInput(m.heldAt),
-                          venue: m.venue,
-                          title: m.title ?? "",
-                          attendeeIds: m.attendees.map((a) => a.id),
-                        }}
-                        action={saveMeeting.bind(null, department.code, m.id)}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            <Pencil />
-                            Edit
-                          </Button>
-                        }
-                      />
-                    </TableCell>
-                  )}
+        <div className="space-y-3">
+          <DataTableToolbar
+            table={table}
+            noun="meetings"
+            searchPlaceholder="Venue, title or reviewer"
+            filters={[
+              {
+                key: "scheme",
+                label: "Scheme",
+                allLabel: "All schemes",
+                options: distinctOptions(meetings, (m) => m.schemeName),
+              },
+              {
+                key: "stage",
+                label: "Stage",
+                allLabel: "All stages",
+                width: "w-52",
+                options: stages
+                  .filter((st) => meetings.some((m) => m.stage === st))
+                  .map((st) => ({ value: st, label: stageLabels[st] })),
+              },
+            ]}
+          />
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableHead table={table} column="when">
+                    When and where
+                  </SortableHead>
+                  <SortableHead table={table} column="stage">
+                    Stage
+                  </SortableHead>
+                  <TableHead>Reviewers present</TableHead>
+                  <SortableHead table={table} column="inputs">
+                    Inputs
+                  </SortableHead>
+                  {editable && <TableHead className="w-0" />}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {table.total === 0 && <NoResultsRow table={table} colSpan={editable ? 5 : 4} />}
+                {table.rows.map((m) => (
+                  <TableRow key={m.id} className="align-top">
+                    <TableCell className="whitespace-normal">
+                      <div className="font-medium">{formatDateTime(m.heldAt)}</div>
+                      <div className="text-sm">
+                        {m.venue}
+                        {m.title ? ` · ${m.title}` : ""}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{m.schemeName}</div>
+                    </TableCell>
+                    <TableCell>{stageLabels[m.stage]}</TableCell>
+                    <TableCell className="whitespace-normal text-sm">
+                      {m.attendees.map((a) => a.name).join(", ") || "—"}
+                    </TableCell>
+                    <TableCell>{m.inputCount}</TableCell>
+                    {editable && (
+                      <TableCell>
+                        <EntityFormDialog
+                          schema="reviewMeeting"
+                          title="Edit meeting"
+                          fields={fields.map((f) =>
+                            m.inputCount > 0 && (f.name === "schemeId" || f.name === "stage")
+                              ? { ...f, disabled: true }
+                              : f,
+                          )}
+                          defaultValues={{
+                            schemeId: m.schemeId,
+                            stage: m.stage,
+                            heldAt: toLocalInput(m.heldAt),
+                            venue: m.venue,
+                            title: m.title ?? "",
+                            attendeeIds: m.attendees.map((a) => a.id),
+                          }}
+                          action={saveMeeting.bind(null, department.code, m.id)}
+                          trigger={
+                            <Button variant="outline" size="sm">
+                              <Pencil />
+                              Edit
+                            </Button>
+                          }
+                        />
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataTablePagination table={table} />
+          </div>
         </div>
       )}
     </>

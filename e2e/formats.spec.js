@@ -6,7 +6,7 @@ import { signIn, unique } from "./helpers.js";
 const saved = (page) => expect(page.getByText(/^(Saved at|All changes saved)/)).toBeVisible({ timeout: 10_000 });
 
 async function openCourse(page, code) {
-  await page.goto("/departments/CSE");
+  await page.goto(`/departments/CSE?courses.q=${code}`);
   await page.getByRole("link", { name: code, exact: true }).first().click();
   await expect(page.getByRole("heading", { name: new RegExp(code) })).toBeVisible();
 }

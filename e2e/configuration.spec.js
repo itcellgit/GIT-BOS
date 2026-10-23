@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn, unique } from "./helpers.js";
+import { searchTable, signIn, unique } from "./helpers.js";
 test("Dean Academics creates a draft scheme by copying 2025, then deletes it", async ({ page }) => {
   await signIn(page, "dean@example.edu");
   await page.goto("/schemes");
@@ -31,6 +31,7 @@ test("Administrator adds a user and gives them a department role", async ({ page
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
+  await searchTable(page, email);
   const row = page.getByRole("row").filter({ hasText: email });
   await row.getByRole("button", { name: "Add role" }).click();
   dialog = page.getByRole("dialog");
@@ -56,7 +57,7 @@ test("BoS Coordinator assigns faculty to a course and removes the assignment", a
   // Works whatever else is assigned to the course: the test adds and removes only its own co-author.
   const person = "BoS Coordinator CSE (demo)";
   await signIn(page, "bos.cse@example.edu");
-  await page.goto("/departments/CSE");
+  await page.goto("/departments/CSE?courses.q=1BCS303");
   const row = page.getByRole("row").filter({ hasText: "1BCS303" });
   const mine = row.getByRole("listitem").filter({ hasText: person });
   await expect(mine).toHaveCount(0);

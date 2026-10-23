@@ -16,9 +16,9 @@ test("an unregistered email cannot sign in", async ({ page }) => {
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
 });
-test("the sign-in page offers Google and Super Admin password sign-in", async ({ page }) => {
+test("the sign-in page offers Google and Sign in with password", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByRole("button", { name: "Super Admin password sign-in" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in with password" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Email code" })).toHaveCount(0);
 });
 test("a refused Google sign-in explains why", async ({ page }) => {

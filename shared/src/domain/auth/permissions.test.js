@@ -30,6 +30,15 @@ describe("can()", () => {
       false,
     );
   });
+  it("lets everyone with a role read approved syllabi of any department", () => {
+    expect(can(actor({ role: "FACULTY", departmentId: CSE }), "syllabus.viewApproved", { departmentId: MECH })).toBe(
+      true,
+    );
+    expect(can(actor({ role: "HOD", departmentId: MECH }), "syllabus.viewApproved", { departmentId: CSE })).toBe(true);
+    expect(can(actor(), "syllabus.viewApproved", { departmentId: CSE })).toBe(false);
+    // …but not the working copy of another department's syllabus.
+    expect(can(actor({ role: "FACULTY", departmentId: CSE }), "syllabus.view", { departmentId: MECH })).toBe(false);
+  });
   it("gives department view to its BoS Coordinator and HoD, and to Dean and Admin everywhere", () => {
     expect(can(actor({ role: "HOD", departmentId: CSE }), "department.view", { departmentId: CSE })).toBe(true);
     expect(can(actor({ role: "HOD", departmentId: CSE }), "department.view", { departmentId: MECH })).toBe(false);

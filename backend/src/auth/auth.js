@@ -8,7 +8,8 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@acp/shared/schemas/ac
 // Accounts are created by the Administrator only; nobody can sign themselves up.
 // Sign-in methods (README §3 Q6, D15):
 //   - everyone: Google, restricted to the institution's Google Workspace domain (GOOGLE_HOSTED_DOMAIN)
-//   - Super Admins only: email + password (a password can never be created for anyone else)
+//   - email + password: Super Admins, and anyone whose password a Super Admin has set or reset to the
+//     default (routes/admin.js). Better Auth itself never creates a password for a non-Super Admin.
 //   - development only: one-time code by email, for the @example.edu demo accounts and end-to-end tests
 const googleDomain = process.env.GOOGLE_HOSTED_DOMAIN || "git.edu";
 const socialProviders = {};

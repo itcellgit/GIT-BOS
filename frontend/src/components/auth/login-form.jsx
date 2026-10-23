@@ -24,7 +24,8 @@ function oauthErrorMessage(code, description, googleDomain) {
 }
 
 /**
- * Sign-in: Google (everyone, institutional domain only) or email + password (Super Admins).
+ * Sign-in: Google (everyone, institutional domain only) or email + password (Super Admins, and users
+ * whose password a Super Admin has set or reset).
  * "Forgot password" sends a reset code to Super Admins only. In development a one-time email code
  * also signs in the @example.edu demo accounts.
  */
@@ -149,7 +150,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
     main: "Sign in",
     "code-email": "Demo accounts",
     "code-enter": "Demo accounts",
-    password: "Super Admin sign-in",
+    password: "Password sign-in",
     "forgot-email": "Reset password",
     "forgot-reset": "Reset password",
   };
@@ -159,8 +160,9 @@ export function LoginForm({ nextPath, options, oauthError }) {
       : "Google sign-in is not configured yet. Ask the portal administrator.",
     "code-email": "Development only: the one-time code is printed in the server console and .local/mail.log.",
     "code-enter": `Enter the 6-digit code sent to ${normalizedEmail}.`,
-    password: "For Super Admins only. Everyone else signs in with Google.",
-    "forgot-email": "Enter your Super Admin email address. We will send a code to reset your password.",
+    password: "Use the password a Super Admin set for you. If you have none, sign in with Google.",
+    "forgot-email":
+      "Super Admins: enter your email address and we will send a code to reset your password. Everyone else: ask a Super Admin to reset your password.",
     "forgot-reset": `If ${normalizedEmail} is a Super Admin account, a reset code has been sent. Enter it and choose a new password.`,
   };
   return (
@@ -206,7 +208,7 @@ export function LoginForm({ nextPath, options, oauthError }) {
             </div>
             <Button type="button" variant="outline" className="w-full" onClick={() => go("password")}>
               <KeyRound />
-              Super Admin password sign-in
+              Sign in with password
             </Button>
             {options?.emailCodeSignIn && (
               <Button

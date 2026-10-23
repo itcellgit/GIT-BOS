@@ -42,9 +42,17 @@ export async function signIn(page, email) {
 /** Fills in the password form on /login and submits it (does not wait for the result). */
 export async function submitPassword(page, email, password) {
   await page.goto("/login");
-  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
+  await page.getByRole("button", { name: "Sign in with password" }).click();
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+}
+/**
+ * Narrows the visible table to rows matching `text` (tables are paginated, so a row may not be on
+ * the first page). Uses the toolbar's search box, like a person would.
+ */
+export async function searchTable(page, text) {
+  await page.getByRole("searchbox").first().fill(text);
+  await expect(page.getByRole("row").filter({ hasText: text }).first()).toBeVisible();
 }
 export const unique = (prefix) => `${prefix}${Date.now().toString(36).toUpperCase().slice(-5)}`;

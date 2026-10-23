@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { schemeStatusLabels } from "@acp/shared/labels";
 import { useApiQuery } from "@/hooks/use-api";
 import { deleteDraftScheme, publishScheme, retireScheme, updateScheme } from "@/lib/actions";
@@ -22,6 +22,7 @@ import {
   Archive,
   Brain,
   CircleCheck,
+  FileCheck2,
   FileText,
   GraduationCap,
   History,
@@ -58,76 +59,91 @@ export function SchemePage() {
               </span>
             }
             actions={
-              canConfigure && (
-                <>
-                  {editable && (
-                    <EntityFormDialog
-                      schema="scheme"
-                      title="Edit scheme"
-                      fields={[
-                        { name: "code", label: "Code", type: "text", width: "third", disabled: true },
-                        { name: "name", label: "Name", type: "text", width: "half" },
-                        { name: "effectiveFrom", label: "Effective from", type: "text", width: "third" },
-                        { name: "framework", label: "Framework", type: "text" },
-                        { name: "teachingWeeks", label: "Teaching weeks per semester", type: "number", width: "half" },
-                        { name: "hoursPerCredit", label: "Hours per credit", type: "number", width: "half" },
-                      ]}
-                      defaultValues={{
-                        code: scheme.code,
-                        name: scheme.name,
-                        effectiveFrom: scheme.effectiveFrom ?? "",
-                        framework: scheme.framework ?? "",
-                        teachingWeeks: scheme.teachingWeeks,
-                        hoursPerCredit: scheme.hoursPerCredit,
-                        cloneFromId: "",
-                      }}
-                      action={updateScheme.bind(null, scheme.id)}
-                      trigger={
-                        <Button variant="outline">
-                          <Pencil />
-                          Edit details
-                        </Button>
-                      }
-                    />
-                  )}
-                  {scheme.status === "DRAFT" && (
-                    <>
-                      <ConfirmActionButton
-                        action={publishScheme.bind(null, scheme.id)}
-                        label="Publish"
-                        icon={CircleCheck}
-                        variant="default"
-                        size="default"
-                        title={`Publish ${scheme.name}?`}
-                        description="Departments will be able to set up their course lists and faculty can start framing syllabi under this scheme."
-                        confirmLabel="Publish"
+              <>
+                {scheme.status !== "DRAFT" && (
+                  <Button asChild variant="outline">
+                    <Link to={`/approved-syllabi?scheme=${scheme.id}`}>
+                      <FileCheck2 />
+                      Approved syllabi
+                    </Link>
+                  </Button>
+                )}
+                {canConfigure && (
+                  <>
+                    {editable && (
+                      <EntityFormDialog
+                        schema="scheme"
+                        title="Edit scheme"
+                        fields={[
+                          { name: "code", label: "Code", type: "text", width: "third", disabled: true },
+                          { name: "name", label: "Name", type: "text", width: "half" },
+                          { name: "effectiveFrom", label: "Effective from", type: "text", width: "third" },
+                          { name: "framework", label: "Framework", type: "text" },
+                          {
+                            name: "teachingWeeks",
+                            label: "Teaching weeks per semester",
+                            type: "number",
+                            width: "half",
+                          },
+                          { name: "hoursPerCredit", label: "Hours per credit", type: "number", width: "half" },
+                        ]}
+                        defaultValues={{
+                          code: scheme.code,
+                          name: scheme.name,
+                          effectiveFrom: scheme.effectiveFrom ?? "",
+                          framework: scheme.framework ?? "",
+                          teachingWeeks: scheme.teachingWeeks,
+                          hoursPerCredit: scheme.hoursPerCredit,
+                          cloneFromId: "",
+                        }}
+                        action={updateScheme.bind(null, scheme.id)}
+                        trigger={
+                          <Button variant="outline">
+                            <Pencil />
+                            Edit details
+                          </Button>
+                        }
                       />
+                    )}
+                    {scheme.status === "DRAFT" && (
+                      <>
+                        <ConfirmActionButton
+                          action={publishScheme.bind(null, scheme.id)}
+                          label="Publish"
+                          icon={CircleCheck}
+                          variant="default"
+                          size="default"
+                          title={`Publish ${scheme.name}?`}
+                          description="Departments will be able to set up their course lists and faculty can start framing syllabi under this scheme."
+                          confirmLabel="Publish"
+                        />
+                        <ConfirmActionButton
+                          action={deleteDraftScheme.bind(null, scheme.id)}
+                          onSuccess={() => navigate("/schemes", { replace: true })}
+                          label="Delete draft"
+                          icon={Trash2}
+                          variant="destructive"
+                          size="default"
+                          title={`Delete ${scheme.name}?`}
+                          description="The draft and all of its configuration will be removed. This cannot be undone."
+                          confirmLabel="Delete"
+                        />
+                      </>
+                    )}
+                    {scheme.status === "PUBLISHED" && (
                       <ConfirmActionButton
-                        action={deleteDraftScheme.bind(null, scheme.id)}
-                        onSuccess={() => navigate("/schemes", { replace: true })}
-                        label="Delete draft"
-                        icon={Trash2}
-                        variant="destructive"
+                        action={retireScheme.bind(null, scheme.id)}
+                        label="Retire"
+                        icon={Archive}
                         size="default"
-                        title={`Delete ${scheme.name}?`}
-                        description="The draft and all of its configuration will be removed. This cannot be undone."
-                        confirmLabel="Delete"
+                        title={`Retire ${scheme.name}?`}
+                        description="The scheme becomes a read-only archive. Do this only when no batch is studying under it any more."
+                        confirmLabel="Retire"
                       />
-                    </>
-                  )}
-                  {scheme.status === "PUBLISHED" && (
-                    <ConfirmActionButton
-                      action={retireScheme.bind(null, scheme.id)}
-                      label="Retire"
-                      icon={Archive}
-                      size="default"
-                      title={`Retire ${scheme.name}?`}
-                      description="The scheme becomes a read-only archive. Do this only when no batch is studying under it any more."
-                      confirmLabel="Retire"
-                    />
-                  )}
-                </>
-              )
+                    )}
+                  </>
+                )}
+              </>
             }
           />
 

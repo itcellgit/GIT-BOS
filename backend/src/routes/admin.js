@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { hashPassword } from "better-auth/crypto";
 import { can } from "@acp/shared/domain/auth/permissions";
-import { initialPasswordSchema } from "@acp/shared/schemas/account";
+import { initialPasswordSchema, passwordProblem } from "@acp/shared/schemas/account";
 import { departmentSchema, programmeSchema, roleAssignmentSchema, userSchema } from "@acp/shared/schemas/config";
 import { assertPermission } from "../auth/session.js";
 import { NotFoundError, UserError } from "../errors.js";
@@ -82,6 +82,12 @@ async function otherActiveSuperAdmins(userId) {
   return db.roleAssignment.count({ where: { role: "SUPER_ADMIN", userId: { not: userId }, user: { isActive: true } } });
 }
 
+/**
+ * The password a Super Admin can reset any user to (DEFAULT_RESET_PASSWORD; "Password@123" if unset).
+ * The user may keep it; they can change it under My account.
+ */
+const defaultResetPassword = process.env.DEFAULT_RESET_PASSWORD || "Password@123";
+
 async function isSuperAdminUser(userId) {
   return (await db.roleAssignment.count({ where: { userId, role: "SUPER_ADMIN" } })) > 0;
 }
@@ -100,8 +106,11 @@ adminRouter.get(
       }),
       db.department.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     ]);
+    const actorIsSuperAdmin = can(actor, "superAdmins.manage");
     return {
-      actorIsSuperAdmin: can(actor, "superAdmins.manage"),
+      actorIsSuperAdmin,
+      // Shown to Super Admins only, so they can tell the user what to sign in with.
+      defaultPassword: actorIsSuperAdmin ? defaultResetPassword : null,
       departments,
       users: users.map(({ accounts, ...u }) => ({ ...u, hasPassword: accounts.length > 0 })),
     };
@@ -207,9 +216,8 @@ adminRouter.delete(
       await db.$transaction(async (tx) => {
         await tx.roleAssignment.delete({ where: { id: role.id } });
         if (role.role === "SUPER_ADMIN") {
-          // Password sign-in belongs to Super Admins only: remove the password and sign the user out.
-          await tx.account.deleteMany({ where: { userId: role.userId, providerId: "credential" } });
-          await tx.user.update({ where: { id: role.userId }, data: { passwordChangeRequired: false } });
+          // Sign the user out so their sessions lose Super Admin access at once. Any password stays:
+          // every user may sign in with a password set by a Super Admin.
           await tx.session.deleteMany({ where: { userId: role.userId } });
         }
         await writeAudit(
@@ -245,7 +253,9 @@ adminRouter.post(
       const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
       if (!user) throw new NotFoundError("User not found.");
       if (!(await isSuperAdminUser(userId))) {
-        throw new UserError("Passwords can be set only for Super Admins. Everyone else signs in with an email code.");
+        throw new UserError(
+          "A chosen password can be set only for Super Admins. For other users, use Reset to default password.",
+        );
       }
       if (!user.isActive) throw new UserError("Activate the account before setting a password.");
 
@@ -268,5 +278,40 @@ adminRouter.post(
       });
     },
     "Password set. Share it securely; it must be changed at the first sign-in.",
+  ),
+);
+
+/**
+ * A Super Admin resets any other user's password to the default (DEFAULT_RESET_PASSWORD), e.g. for
+ * someone who cannot use Google sign-in. The user is signed out everywhere and may keep the default.
+ */
+adminRouter.post(
+  "/users/:id/password/default",
+  handle(
+    null,
+    async (_data, req) => {
+      const userId = req.params.id;
+      const actor = assertPermission(req, "superAdmins.manage");
+      if (userId === actor.id) throw new UserError("Change your own password under My account.");
+      const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
+      if (!user) throw new NotFoundError("User not found.");
+      if (!user.isActive) throw new UserError("Activate the account before resetting its password.");
+      const problem = passwordProblem(defaultResetPassword);
+      if (problem) throw new UserError(`DEFAULT_RESET_PASSWORD in the server settings is not allowed: ${problem}`);
+
+      const hash = await hashPassword(defaultResetPassword);
+      await db.$transaction(async (tx) => {
+        const credential = await tx.account.findFirst({ where: { userId, providerId: "credential" } });
+        if (credential) await tx.account.update({ where: { id: credential.id }, data: { password: hash } });
+        else await tx.account.create({ data: { userId, providerId: "credential", accountId: userId, password: hash } });
+        await tx.user.update({ where: { id: userId }, data: { passwordChangeRequired: false } });
+        await tx.session.deleteMany({ where: { userId } });
+        await writeAudit(
+          { actorId: actor.id, action: "user.passwordResetToDefault", entityType: "User", entityId: userId },
+          tx,
+        );
+      });
+    },
+    "Password reset to the default. The user can now sign in with it.",
   ),
 );

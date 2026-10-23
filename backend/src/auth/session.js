@@ -11,7 +11,7 @@ import { db } from "../infra/db.js";
  * @property {string} email
  * @property {string|null} designation
  * @property {boolean} isActive
- * @property {boolean} hasPassword            signs in with a password (Super Admins only)
+ * @property {boolean} hasPassword            can sign in with a password
  * @property {boolean} passwordChangeRequired must choose a new password before doing anything else
  * @property {{role: string, departmentId: string|null, departmentCode: string|null}[]} roles
  */

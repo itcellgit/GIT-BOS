@@ -1,4 +1,6 @@
+import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/layout/page-header";
+import { useDataTable } from "@/hooks/use-data-table";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/download";
@@ -6,6 +8,20 @@ import { History } from "lucide-react";
 
 /** Changes to Layer 1 made after publishing, and how many syllabi each one still flags (README §5). */
 export function AmendmentsSection({ scheme, amendments }) {
+  const table = useDataTable({
+    id: "amendments",
+    rows: amendments,
+    columns: {
+      when: { sortValue: (a) => new Date(a.at), firstDir: "desc" },
+      by: { sortValue: (a) => a.by },
+      affected: { sortValue: (a) => a.affectedCount, firstDir: "desc" },
+      open: { sortValue: (a) => a.openCount, firstDir: "desc" },
+    },
+    defaultSort: { key: "when", dir: "desc" },
+    defaultPageSize: 10,
+    searchText: (a) => [a.summary, a.by].join(" "),
+    filterDefs: { open: (a, v) => (v === "open" ? a.openCount > 0 : a.openCount === 0) },
+  });
   return (
     <div className="space-y-4">
       <p className="max-w-3xl text-sm text-muted-foreground">
@@ -21,35 +37,64 @@ export function AmendmentsSection({ scheme, amendments }) {
             : "No amendments since this scheme was published."}
         </EmptyState>
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>Change</TableHead>
-                <TableHead>By</TableHead>
-                <TableHead className="text-right">Syllabi flagged</TableHead>
-                <TableHead className="text-right">Still open</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {amendments.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(a.at)}</TableCell>
-                  <TableCell className="font-medium">{a.summary}</TableCell>
-                  <TableCell>{a.by ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{a.affectedCount}</TableCell>
-                  <TableCell className="text-right">
-                    {a.openCount > 0 ? (
-                      <Badge variant="warning">{a.openCount}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
+        <div className="space-y-3">
+          <DataTableToolbar
+            table={table}
+            noun="amendments"
+            searchPlaceholder="Change or person"
+            filters={[
+              {
+                key: "open",
+                label: "Flags",
+                allLabel: "All amendments",
+                width: "w-48",
+                options: [
+                  { value: "open", label: "Some still open" },
+                  { value: "closed", label: "All cleared" },
+                ],
+              },
+            ]}
+          />
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableHead table={table} column="when">
+                    When
+                  </SortableHead>
+                  <TableHead>Change</TableHead>
+                  <SortableHead table={table} column="by">
+                    By
+                  </SortableHead>
+                  <SortableHead table={table} column="affected" className="text-right" align="right">
+                    Syllabi flagged
+                  </SortableHead>
+                  <SortableHead table={table} column="open" className="text-right" align="right">
+                    Still open
+                  </SortableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {table.total === 0 && <NoResultsRow table={table} colSpan={5} />}
+                {table.rows.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(a.at)}</TableCell>
+                    <TableCell className="font-medium">{a.summary}</TableCell>
+                    <TableCell>{a.by ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{a.affectedCount}</TableCell>
+                    <TableCell className="text-right">
+                      {a.openCount > 0 ? (
+                        <Badge variant="warning">{a.openCount}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <DataTablePagination table={table} />
+          </div>
         </div>
       )}
     </div>

@@ -47,6 +47,10 @@ export function can(actor, action, resource = {}) {
     // Phase 2 (README §4): record meeting inputs, close a stage, record approval, unlock (D3, D5).
     case "syllabus.review":
       return dept !== null && hasRole(actor, "BOS_COORDINATOR", dept);
+    // The Academic Council-approved (frozen) copy of any syllabus: the institution's official
+    // document, readable and downloadable by everyone who works in the portal.
+    case "syllabus.viewApproved":
+      return actor.roles.length > 0;
     case "syllabus.view":
       if (isDean || resource.isAssigned) return true;
       return dept !== null && (hasRole(actor, "BOS_COORDINATOR", dept) || hasRole(actor, "HOD", dept));

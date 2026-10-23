@@ -7,6 +7,9 @@ import { BadgeCheck, BookOpen, ChartBar, Hourglass, ListFilter, Table2, Triangle
 import { progressByGroup, progressLabels, progressSteps } from "@acp/shared/domain/reviews/progress";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { useApiQuery } from "@/hooks/use-api";
+import { useDataTable } from "@/hooks/use-data-table";
+import { distinctOptions } from "@/lib/data-table";
+import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
 import { cn } from "@/lib/utils";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
@@ -301,6 +304,22 @@ function CountsTable({ groups, grouping }) {
 }
 
 function CourseTable({ rows, schemeId, filter, onClear }) {
+  const table = useDataTable({
+    id: "courses",
+    rows,
+    columns: {
+      code: { sortValue: (r) => r.code },
+      department: { sortValue: (r) => r.department },
+      semester: { sortValue: (r) => r.semester },
+      status: { sortValue: (r) => progressSteps.indexOf(r.step) },
+      coordinator: { sortValue: (r) => r.coordinators.join(", ") || null },
+    },
+    searchText: (r) => [r.code, r.title, r.department, r.programmes.join(" "), r.coordinators.join(" ")].join(" "),
+    filterDefs: {
+      format: (r, v) => r.format === v,
+      inputs: (r, v) => (v === "pending" ? r.pendingInputs > 0 : r.pendingInputs === 0),
+    },
+  });
   const title = !filter
     ? "All courses"
     : filter.by === "flag"
@@ -323,20 +342,60 @@ function CourseTable({ rows, schemeId, filter, onClear }) {
           </CardAction>
         )}
       </CardHeader>
+      <div className="border-b px-5 py-4">
+        <DataTableToolbar
+          table={table}
+          noun="courses"
+          searchPlaceholder="Code, title, department or coordinator"
+          filters={[
+            {
+              key: "format",
+              label: "Format",
+              allLabel: "All formats",
+              options: distinctOptions(
+                rows,
+                (r) => r.format,
+                (v) => formatLabels[v],
+              ),
+            },
+            {
+              key: "inputs",
+              label: "Review inputs",
+              allLabel: "Any",
+              width: "w-44",
+              options: [
+                { value: "pending", label: "Inputs pending" },
+                { value: "none", label: "None pending" },
+              ],
+            },
+          ]}
+        />
+      </div>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Course</TableHead>
-              <TableHead>Department</TableHead>
+              <SortableHead table={table} column="code">
+                Course
+              </SortableHead>
+              <SortableHead table={table} column="department">
+                Department
+              </SortableHead>
               <TableHead>Programmes</TableHead>
-              <TableHead className="text-right">Sem</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Course Coordinator</TableHead>
+              <SortableHead table={table} column="semester" className="text-right" align="right">
+                Sem
+              </SortableHead>
+              <SortableHead table={table} column="status">
+                Status
+              </SortableHead>
+              <SortableHead table={table} column="coordinator">
+                Course Coordinator
+              </SortableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {table.total === 0 && <NoResultsRow table={table} colSpan={6} />}
+            {table.rows.map((r) => (
               <TableRow key={r.courseId}>
                 <TableCell>
                   <Link to={`/syllabi/${schemeId}/${r.courseId}`} className="font-medium hover:underline">
@@ -362,6 +421,7 @@ function CourseTable({ rows, schemeId, filter, onClear }) {
           </TableBody>
         </Table>
       </div>
+      <DataTablePagination table={table} />
     </Card>
   );
 }

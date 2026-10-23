@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { mailsTo, signIn, submitPassword, unique, waitForCode } from "./helpers.js";
+import { mailsTo, searchTable, signIn, submitPassword, unique, waitForCode } from "./helpers.js";
 // A dedicated Super Admin for these tests. `npm run super-admin` resets it before the run,
 // exactly as an operator would on the server, so the tests can be repeated.
 const EMAIL = "superadmin.e2e@example.edu";
@@ -66,7 +66,7 @@ test("has full access: administration, scheme configuration and every department
 test("forgot password: reset with an emailed code", async ({ page }) => {
   const started = Date.now() - 1000;
   await page.goto("/login");
-  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
+  await page.getByRole("button", { name: "Sign in with password" }).click();
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByRole("button", { name: "Send reset code" }).click();
@@ -95,6 +95,7 @@ test("a Super Admin makes another Super Admin and sets their initial password", 
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
+  await searchTable(page, email);
   const row = page.getByRole("row").filter({ hasText: email });
   // Only Super Admin rows offer a password.
   await expect(row.getByRole("button", { name: "Set password" })).toHaveCount(0);
@@ -118,6 +119,7 @@ test("a Super Admin makes another Super Admin and sets their initial password", 
   await expect(row.getByText("must change at next sign-in")).toBeVisible();
   await expect(row.getByRole("button", { name: "Reset password" })).toBeVisible();
   // Nobody offers to set their own password from this page.
+  await searchTable(page, EMAIL);
   const ownRow = page.getByRole("row").filter({ hasText: EMAIL });
   await expect(ownRow.getByRole("button", { name: /(Set|Reset) password/ })).toHaveCount(0);
 
@@ -139,10 +141,10 @@ test("a Super Admin makes another Super Admin and sets their initial password", 
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(row.getByText("inactive")).toBeVisible();
 });
-test("people who are not Super Admins cannot get a password", async ({ page }) => {
+test("people who are not Super Admins cannot reset a password by email", async ({ page }) => {
   const started = Date.now() - 1000;
   await page.goto("/login");
-  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
+  await page.getByRole("button", { name: "Sign in with password" }).click();
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("Email").fill("faculty.cse@example.edu");
   await page.getByRole("button", { name: "Send reset code" }).click();
@@ -159,12 +161,30 @@ test("people who are not Super Admins cannot get a password", async ({ page }) =
   await submitPassword(page, "faculty.cse@example.edu", "Faculty-pass-2026");
   await expect(page.getByRole("alert")).toHaveText("The email or password is incorrect.");
 });
+test("a Super Admin resets a user's password to the default; the user signs in with it", async ({ page, browser }) => {
+  await submitPassword(page, EMAIL, RESET);
+  await expect(page.getByRole("heading", { name: /Welcome/ })).toBeVisible();
+  await page.goto("/admin/users?users.q=hod.cse@example.edu");
+  const row = page.getByRole("row").filter({ hasText: "hod.cse@example.edu" });
+  await row.getByRole("button", { name: "Reset to default" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Reset password" }).click();
+  await expect(row.getByText("Password sign-in")).toBeVisible();
+  // No reset button on your own row.
+  await searchTable(page, EMAIL);
+  const ownRow = page.getByRole("row").filter({ hasText: EMAIL });
+  await expect(ownRow.getByRole("button", { name: "Reset to default" })).toHaveCount(0);
+  // The user signs in with the default password and is not forced to change it.
+  const other = await (await browser.newContext()).newPage();
+  await submitPassword(other, "hod.cse@example.edu", "Password@123");
+  await expect(other.getByRole("heading", { name: /Welcome/ })).toBeVisible();
+});
 test("an ordinary Administrator cannot create or change Super Admins", async ({ page }) => {
   await signIn(page, "it.admin@example.edu");
-  await page.goto("/admin/users");
+  await page.goto(`/admin/users?users.q=${EMAIL}`);
   const superRow = page.getByRole("row").filter({ hasText: EMAIL });
   await expect(superRow.getByText("Managed by Super Admins")).toBeVisible();
   await expect(superRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await searchTable(page, "faculty.cse@example.edu");
   const facultyRow = page.getByRole("row").filter({ hasText: "faculty.cse@example.edu" });
   await facultyRow.getByRole("button", { name: "Add role" }).click();
   await page.getByRole("dialog").getByLabel("Role").click();

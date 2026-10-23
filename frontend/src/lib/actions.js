@@ -12,6 +12,7 @@ export const saveUser = (id, values) => save("/admin/users", id, values);
 export const addRole = (userId, values) => api.post(`/admin/users/${userId}/roles`, values);
 export const removeRole = (roleId) => api.delete(`/admin/roles/${roleId}`);
 export const setInitialPassword = (userId, values) => api.post(`/admin/users/${userId}/password`, values);
+export const resetPasswordToDefault = (userId) => api.post(`/admin/users/${userId}/password/default`, {});
 
 // --- Schemes (Layer 1) --------------------------------------------------------------
 export const createScheme = (values) => api.post("/schemes", values);
