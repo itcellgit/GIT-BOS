@@ -12,7 +12,7 @@ backend/src/generated/
 .env*
 !.env.example
 
-# Local development data: embedded PostgreSQL, dev mail log
+# Local development data: dev mail log
 /.local/
 
 # Playwright

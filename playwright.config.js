@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // End-to-end tests run against the local dev servers and the seeded local database:
-//   npm run db:start   (separate terminal)
+//   PostgreSQL running with DATABASE_URL set in .env (npm run db:deploy once)
 //   npm run db:seed
 //   npm run test:e2e   (starts `npm run dev` — API on :4000, React on :5173 — unless already running)
 export default defineConfig({

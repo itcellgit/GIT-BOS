@@ -4,7 +4,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import { APIError } from "better-auth/api";
 import { departmentsWithRole } from "@acp/shared/domain/auth/permissions";
 import { changePasswordSchema, resetPasswordSchema } from "@acp/shared/schemas/account";
-import { auth, enabledSocialProviders } from "../auth/auth.js";
+import { auth, emailCodeSignIn, enabledSocialProviders, googleSignInDomain } from "../auth/auth.js";
 import { assertSignedIn } from "../auth/session.js";
 import { UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
@@ -16,7 +16,11 @@ export const meRouter = Router();
 /** Public: which sign-in options to show on the login page. */
 meRouter.get(
   "/auth-options",
-  handle(null, async () => ({ socialProviders: enabledSocialProviders })),
+  handle(null, async () => ({
+    socialProviders: enabledSocialProviders,
+    googleDomain: googleSignInDomain,
+    emailCodeSignIn,
+  })),
 );
 
 /** The signed-in user (roles, password state), or null when signed out. */

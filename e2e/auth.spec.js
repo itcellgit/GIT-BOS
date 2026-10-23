@@ -6,6 +6,7 @@ test("signed-out visitors are sent to the sign-in page", async ({ page }) => {
 });
 test("an unregistered email cannot sign in", async ({ page }) => {
   await page.goto("/login");
+  await page.getByRole("button", { name: "Demo accounts (development only)" }).click();
   await page.getByLabel("Email").fill("someone.unknown@example.com");
   await page.getByRole("button", { name: "Send code" }).click();
   // Same screen as for a real account, so the form does not reveal who has one…
@@ -14,6 +15,15 @@ test("an unregistered email cannot sign in", async ({ page }) => {
   // …but no code was sent, so sign-in fails.
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/login/);
+});
+test("the sign-in page offers Google and Super Admin password sign-in", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "Super Admin password sign-in" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Email code" })).toHaveCount(0);
+});
+test("a refused Google sign-in explains why", async ({ page }) => {
+  await page.goto("/login?error=signup_disabled");
+  await expect(page.getByRole("alert")).toContainText("not registered in the portal");
 });
 test("faculty sees their assigned course and no administration links", async ({ page }) => {
   await signIn(page, "faculty.cse@example.edu");

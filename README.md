@@ -14,7 +14,14 @@ Faculty fill in their course syllabus through web forms, following the course-fo
 
 ## Getting started (local development)
 
-Requirements: **Node.js 24** and npm. No Docker or PostgreSQL install is needed for development — a real PostgreSQL 17 server runs from `node_modules` (the `embedded-postgres` package).
+Requirements: **Node.js 24**, npm and a local **PostgreSQL 17** server (Windows installer from postgresql.org, managed with **pgAdmin**). Create a login role and a UTF-8 database for the portal once (pgAdmin → Query Tool, connected as `postgres`):
+
+```sql
+CREATE ROLE acp LOGIN PASSWORD 'choose-a-password' CREATEDB;  -- CREATEDB lets `npm run db:migrate` use a shadow database
+CREATE DATABASE acp OWNER acp ENCODING 'UTF8' TEMPLATE template0;
+```
+
+Then set `DATABASE_URL="postgresql://acp:choose-a-password@localhost:5432/acp"` in `.env`.
 
 The repository is an **npm workspace** with three packages: `backend/` (Express API), `frontend/` (React app) and `shared/` (rules and validation used by both). Run every command from the repository root.
 
@@ -22,8 +29,7 @@ The repository is an **npm workspace** with three packages: `backend/` (Express 
 npm install                      # installs all three packages; generates the Prisma client
 cp .env.example .env             # then set BETTER_AUTH_SECRET (see the comment in the file)
 
-npm run db:start                 # terminal 1: local PostgreSQL on port 54329 (keep it open)
-npm run db:deploy                # terminal 2: create the tables
+npm run db:deploy                # create the tables (applies backend/prisma/migrations)
 npm run db:seed                  # 2025 scheme, B.E. CSE semesters III–IV, outcome lists, users
 npm run dev                      # API on http://localhost:4000 + React app on http://localhost:5173
 ```
@@ -32,7 +38,7 @@ Open **http://localhost:5173**. In development, Vite forwards every `/api` reque
 
 **Using VS Code Live Share.** Share frontend port **5173** with guests; the Vite proxy forwards their `/api` requests to the API on port 4000. Development accepts the forwarded hostname or IP for sign-in when it matches the request host.
 
-**Signing in locally.** Everyone can sign in with a one-time code sent by email. Without `SMTP_HOST`, development prints the code in the `npm run dev` terminal (and keeps a copy in `.local/mail.log`). The Super Admin can also sign in with a password (D15). Seeded accounts:
+**Signing in locally.** Real users sign in with **Google** (their @git.edu account, D17) once `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; the Super Admin can also sign in with a password (D15). The `@example.edu` demo accounts use **Demo accounts (development only)** on the sign-in page: a one-time code printed in the `npm run dev` terminal (and kept in `.local/mail.log`). This option does not exist in production. Seeded accounts:
 
 | Email | Role |
 |---|---|
@@ -51,11 +57,10 @@ The `@example.edu` demo accounts are created only when `NODE_ENV` is not `produc
 |---|---|
 | `npm run dev` | API (port 4000, restarts on change) and React app (port 5173, hot reload) together |
 | `npm test` | Unit tests (Vitest): scheme rules, permissions, password policy (`shared/`) and API basics (`backend/`) |
-| `npm run test:e2e` | End-to-end tests (Playwright); needs `db:start` running and the seed loaded |
+| `npm run test:e2e` | End-to-end tests (Playwright); needs PostgreSQL running and the seed loaded |
 | `npm run lint` / `npm run format` | Code quality (ESLint, Prettier) |
 | `npm run db:migrate` | After changing `backend/prisma/schema.prisma`: create and apply a migration |
 | `npm run db:studio` | Browse the database |
-| `npm run db:utf8` | Convert a local database created before UTF-8 was enforced (Windows made it WIN1252); keeps the data and a backup |
 | `npm run super-admin` | Create the Super Admin, or reset a lost password |
 | `npm run build` | Production build of the React app (`frontend/dist`), served by Express |
 | `npm start` | Run the API in production mode (serves `frontend/dist` as well) |
@@ -139,6 +144,7 @@ Where these documents conflict with the decisions below, **the decisions below w
 | D14 | **One repository, three npm workspaces:** `backend/` (Express API), `frontend/` (React app), `shared/` (rules and validation used by both). In production Express serves the built React app, so it deploys as **one container**. Import rules between the folders are enforced by ESLint (§10, "Folder structure"). |
 | D15 | **Super Admin:** full access everywhere (still audit-logged); signs in with **email + password** (12+ characters, letters and digits), must replace an initial password at first sign-in, can reset a forgotten password with an emailed code. Only a Super Admin can create or remove another, and the last one cannot be removed or deactivated. After granting the role, a Super Admin sets the colleague's initial password on the Users page (also used to reset a colleague's lost password); the colleague is signed out and must replace it at the next sign-in. Passwords can never be created for any other role. Email and initial password come from `.env` (`SUPER_ADMIN_*`); `npm run super-admin` recovers a lost password. Ordinary users keep one-time email codes. |
 | D16 | **One print path:** a print layout is a pure function in `shared/src/print/` that turns the syllabus JSON into a complete HTML document. The browser preview and the server PDF both use it, so they cannot differ. PDFs come from headless Chromium: Gotenberg in production, Playwright's Chromium in development. Standard text blocks use a small, escaped formatting (pipe tables, `-` and `1.` lists, `**bold**`) so Dean Academics can edit the CIE/SEE tables and rubrics without a developer. |
+| D17 | **Sign-in with Google only** (23 Oct 2026, answers Q6): everyone signs in with their **@git.edu Google Workspace account** (`GOOGLE_HOSTED_DOMAIN`; Google's signed `hd` claim is checked on the server), and only if the Administrator has added them. Email-code sign-in is removed in production; it remains in development only, for the `@example.edu` demo accounts and the end-to-end tests. The Super Admin keeps email + password (D15) as the way in if Google is unavailable. |
 
 ---
 
@@ -153,7 +159,7 @@ These questions are pending with Dean Academics. Build to the assumption, and ke
 | Q3 | SDC and NCMC syllabi | Not in scope for v1. Categories can be marked "no syllabus required". | Flag on `CourseCategory`. A format can be added later. |
 | Q4 | IPCC standard vs project-based format | Set **per category by Dean Academics**, and overridable **per course by the BoS Coordinator** from the allowed formats. | `CourseCategory.allowed_formats[]` plus `SchemeCourse.format`. |
 | Q5 | WK / SDG representation; expert link | The WK and SDG columns show the selected codes (e.g. "WK3, WK5", "SDG 4") picked from configured lists (WK1–WK9, SDG 1–17). The expert **does** use a secure link. | The lists are Layer-1 configuration. How the cell is displayed is set in the print layout. |
-| Q6 | Sign-in provider | Google Workspace or Microsoft 365 **single sign-on**, with an email-OTP fallback. | Uses a pluggable authentication library, so either provider is a configuration change. |
+| Q6 | Sign-in provider | **Answered (D17):** Google Workspace sign-in for @git.edu accounts; no email-code fallback in production. | — |
 | Q7 | Which CIE scheme and rubrics apply to 4th-year Theory courses? (The template has a 2nd-year and a 3rd-year variant.) | None is seeded for year 4; the print leaves the CIE section out. | Dean Academics adds a text block for year of study 4 (or makes one apply to all years) on the scheme page. No code change. |
 
 ---
@@ -419,7 +425,7 @@ Each rule is either an **error** (blocks submission) or a **warning** (shown in 
 | Styling | **Tailwind CSS 4** + **shadcn/ui** components (Radix based, JavaScript) | Accessible ready-made components (dialogs, tabs, selects, tables) whose code lives in the project |
 | Data loading | **TanStack React Query** | Caching and reloading of API data with very little code |
 | Forms and validation | **React Hook Form + Zod** | **One Zod schema per form is used in the browser and again by the API.** Validation rules are written once |
-| Authentication | **Better Auth** (Express handler): email one-time codes; email + password for Super Admins (D15); optional Google / Microsoft SSO; sessions stored in PostgreSQL | Q6; self-hosted, no outside auth service |
+| Authentication | **Better Auth** (Express handler): Google sign-in restricted to @git.edu (D17); email + password for Super Admins (D15); email codes for demo accounts in development only; sessions stored in PostgreSQL | Q6; self-hosted, no outside auth service |
 | Authorisation | One `can(user, action, resource)` function in `shared/`, with department scoping. The API checks it on every request; the React app uses the same function only to show or hide buttons | Permissions live in one place |
 | HTML → PDF | **Gotenberg 8** (headless Chromium behind an HTTP API) in production; Playwright's Chromium in development. Both receive the HTML from `shared/src/print/` with the fonts embedded | Recent Chromium supports `@page` sizes, margins and margin boxes for running headers and "Page X of Y" |
 | Print font | **Carlito** (matches Calibri's letter widths) | Calibri cannot legally be installed on Linux |
@@ -452,7 +458,7 @@ academic-curriculum-portal/
 ├─ package.json            workspace root: npm run dev / test / lint / build
 ├─ backend/                EXPRESS API (Node.js)
 │  ├─ prisma/              schema.prisma, migrations/, seed.js, super-admin.js
-│  ├─ scripts/             dev-db.js (local PostgreSQL), super-admin.js (create / recover Super Admin)
+│  ├─ scripts/             super-admin.js (create / recover Super Admin)
 │  └─ src/
 │     ├─ server.js         starts the API (port 4000)
 │     ├─ app.js            Express app: security headers, /api/auth (Better Auth), routes,
@@ -522,7 +528,7 @@ All endpoints are under `/api` and return JSON (`{ ok, data, message }` or `{ ok
 
 | Area | Endpoints |
 |---|---|
-| Sign-in (Better Auth) | `/api/auth/*` — email code, password, sign-out, password reset code |
+| Sign-in (Better Auth) | `/api/auth/*` — Google sign-in and callback, Super Admin password, sign-out, password reset code (email code in development only) |
 | Me | `GET /me`, `GET /home`, `GET /auth-options`, `POST /account/change-password`, `POST /account/reset-password` |
 | Administration | `GET /admin/users`, `POST /admin/users`, `PUT /admin/users/:id`, `POST /admin/users/:id/roles`, `DELETE /admin/roles/:id`, `GET/POST /admin/departments`, `PUT /admin/departments/:id`, `POST /admin/programmes`, `PUT /admin/programmes/:id` |
 | Schemes (Layer 1) | `GET/POST /schemes`, `GET/PUT/DELETE /schemes/:id`, `POST /schemes/:id/publish`, `POST /schemes/:id/retire`; categories, credit patterns, formats, outcomes, Bloom levels and text blocks under `/schemes/:id/...` |
@@ -571,7 +577,7 @@ Unit content uses a restricted rich-text editor (e.g. Tiptap) that allows only b
 ## 11. Security and non-functional requirements
 
 - Role- and department-scoped permissions are checked by the API on every request (`assertPermission` in `backend/src/auth/session.js`); the React app only hides buttons.
-- Sign-in: accounts are created only by the Administrator (no self sign-up). Ordinary users sign in with one-time email codes; Super Admins also with a password (12+ characters, letters and digits, replaced at first sign-in). Passwords are hashed by Better Auth; a password can never be created for any role other than Super Admin. Sign-in endpoints are rate-limited in production.
+- Sign-in: accounts are created only by the Administrator (no self sign-up). Ordinary users sign in with their @git.edu Google account (D17); Super Admins also with a password (12+ characters, letters and digits, replaced at first sign-in). Passwords are hashed by Better Auth; a password can never be created for any role other than Super Admin. Sign-in endpoints are rate-limited in production.
 - Session cookies are HTTP-only and same-site; the React app and API share one origin (Vite proxy in development, Express in production), so no cross-origin access is opened.
 - Security headers (Content-Security-Policy, X-Content-Type-Options, frame protection) from Helmet and Caddy; HSTS from Caddy.
 - Expert tokens: random 256-bit value with only its hash stored, an expiry date, the ability to revoke, request limits, and read-only access to one version.
@@ -614,7 +620,7 @@ Each phase ends with a demo to the BoS Coordinator or Dean Academics and a short
 
 **Built:**
 - Project set-up: npm workspaces (`backend/` Express, `frontend/` React + Vite + Tailwind, `shared/`), Prisma, Docker Compose, CI
-- Authentication (Better Auth): email codes for everyone; Super Admin with password (D15); roles and department scoping (`can()`)
+- Authentication (Better Auth): Google sign-in for @git.edu accounts (D17); Super Admin with password (D15); roles and department scoping (`can()`)
 - Reusable **"table + form driven by a Zod schema"** pattern for configuration screens
 - Prisma seed with the 2025 scheme and the CSE semester III–IV courses
 - Layer 1 configuration: scheme, rules, categories, formats, text blocks, outcome lists

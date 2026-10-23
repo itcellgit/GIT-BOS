@@ -17,8 +17,6 @@
     "format:check": "prettier --check .",
     "test": "npm test -w shared && npm test -w backend",
     "test:e2e": "playwright test",
-    "db:start": "npm run db:start -w backend",
-    "db:utf8": "npm run db:utf8 -w backend",
     "db:migrate": "npm run db:migrate -w backend",
     "db:deploy": "npm run db:deploy -w backend",
     "db:seed": "npm run db:seed -w backend",
@@ -50,7 +48,6 @@
     ]
   },
   "allowScripts": {
-    "@embedded-postgres/windows-x64": true,
     "@prisma/engines": true,
     "esbuild": true,
     "prisma": true,

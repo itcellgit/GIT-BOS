@@ -1,28 +1,15 @@
-import { Link } from "react-router";
-import { Button } from "@/components/ui/button";
+import { FileQuestion, ShieldOff } from "lucide-react";
+import { StatusMessage } from "@/components/layout/query-state";
 
 export function NoAccessPage() {
   return (
-    <div className="mx-auto max-w-md space-y-4 py-16 text-center">
-      <h1 className="text-xl font-semibold">You don&apos;t have access to this page</h1>
-      <p className="text-sm text-muted-foreground">
-        Your role does not include this section. If you think this is a mistake, ask the portal administrator to check
-        your roles.
-      </p>
-      <Button asChild variant="outline">
-        <Link to="/">Back to home</Link>
-      </Button>
-    </div>
+    <StatusMessage icon={ShieldOff} title="You don't have access to this page">
+      Your role does not include this section. If you think this is a mistake, ask the portal administrator to check
+      your roles.
+    </StatusMessage>
   );
 }
 
 export function NotFoundPage() {
-  return (
-    <div className="mx-auto max-w-md space-y-4 py-16 text-center">
-      <h1 className="text-xl font-semibold">Page not found</h1>
-      <Button asChild variant="outline">
-        <Link to="/">Back to home</Link>
-      </Button>
-    </div>
-  );
+  return <StatusMessage icon={FileQuestion} title="Page not found" />;
 }

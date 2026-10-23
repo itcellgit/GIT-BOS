@@ -1,19 +1,24 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "../infra/db.js";
 import { sendMail } from "../infra/mail.js";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@acp/shared/schemas/account";
 // Accounts are created by the Administrator only; nobody can sign themselves up.
 // Sign-in methods (README §3 Q6, D15):
-//   - everyone: one-time code by email, or Google / Microsoft when configured
+//   - everyone: Google, restricted to the institution's Google Workspace domain (GOOGLE_HOSTED_DOMAIN)
 //   - Super Admins only: email + password (a password can never be created for anyone else)
+//   - development only: one-time code by email, for the @example.edu demo accounts and end-to-end tests
+const googleDomain = process.env.GOOGLE_HOSTED_DOMAIN || "git.edu";
 const socialProviders = {};
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   socialProviders.google = {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    // Better Auth checks Google's signed `hd` claim, so personal Gmail and other domains are refused.
+    hd: googleDomain,
+    prompt: "select_account",
     disableSignUp: true,
   };
 }
@@ -26,6 +31,10 @@ if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
   };
 }
 export const enabledSocialProviders = Object.keys(socialProviders);
+/** The Google Workspace domain allowed to sign in, or null when Google sign-in is not configured. */
+export const googleSignInDomain = socialProviders.google ? googleDomain : null;
+/** Email-code sign-in exists only in development (demo accounts, end-to-end tests). */
+export const emailCodeSignIn = process.env.NODE_ENV !== "production";
 async function isSuperAdmin(where) {
   const user = await db.user.findUnique({
     where,
@@ -66,6 +75,15 @@ export const auth = betterAuth({
     autoSignIn: false,
   },
   socialProviders,
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (emailCodeSignIn) return;
+      const sendsSignInCode = ctx.path === "/email-otp/send-verification-otp" && ctx.body?.type !== "forget-password";
+      if (ctx.path === "/sign-in/email-otp" || sendsSignInCode) {
+        throw new APIError("FORBIDDEN", { message: "Sign in with your institutional Google account." });
+      }
+    }),
+  },
   account: {
     accountLinking: { enabled: true, trustedProviders: ["google", "microsoft"] },
   },

@@ -24,10 +24,11 @@ export async function waitForCode(email, after, pattern) {
     .not.toBeNull();
   return code;
 }
-/** Signs in through the real form using the one-time code from the dev mail log. */
+/** Signs in a demo account through the development-only email-code form (code from the dev mail log). */
 export async function signIn(page, email) {
   const started = Date.now() - 1000;
   await page.goto("/login");
+  await page.getByRole("button", { name: "Demo accounts (development only)" }).click();
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.getByLabel("Sign-in code")).toBeVisible();
@@ -39,7 +40,7 @@ export async function signIn(page, email) {
 /** Fills in the password form on /login and submits it (does not wait for the result). */
 export async function submitPassword(page, email, password) {
   await page.goto("/login");
-  await page.getByRole("tab", { name: "Password" }).click();
+  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();

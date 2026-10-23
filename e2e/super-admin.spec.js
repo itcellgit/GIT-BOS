@@ -66,7 +66,7 @@ test("has full access: administration, scheme configuration and every department
 test("forgot password: reset with an emailed code", async ({ page }) => {
   const started = Date.now() - 1000;
   await page.goto("/login");
-  await page.getByRole("tab", { name: "Password" }).click();
+  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByRole("button", { name: "Send reset code" }).click();
@@ -142,7 +142,7 @@ test("a Super Admin makes another Super Admin and sets their initial password", 
 test("people who are not Super Admins cannot get a password", async ({ page }) => {
   const started = Date.now() - 1000;
   await page.goto("/login");
-  await page.getByRole("tab", { name: "Password" }).click();
+  await page.getByRole("button", { name: "Super Admin password sign-in" }).click();
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await page.getByLabel("Email").fill("faculty.cse@example.edu");
   await page.getByRole("button", { name: "Send reset code" }).click();
