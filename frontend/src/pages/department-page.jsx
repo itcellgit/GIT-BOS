@@ -7,7 +7,14 @@ import { useDataTable } from "@/hooks/use-data-table";
 import { distinctOptions } from "@/lib/data-table";
 import { addAssignment, removeAssignment, saveMeeting, saveReviewer } from "@/lib/actions";
 import { formatDateTime, toLocalInput } from "@/lib/download";
-import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
+import {
+  DataTablePagination,
+  DataTableToolbar,
+  NoResultsRow,
+  SerialCell,
+  SerialHead,
+  SortableHead,
+} from "@/components/data-table/data-table";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
@@ -218,6 +225,7 @@ function Department({ department, editable, programmes, schemes, courses, review
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <SerialHead />
                       <SortableHead table={courseTable} column="code">
                         Course
                       </SortableHead>
@@ -235,9 +243,10 @@ function Department({ department, editable, programmes, schemes, courses, review
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {courseTable.total === 0 && <NoResultsRow table={courseTable} colSpan={editable ? 6 : 5} />}
-                    {courseTable.rows.map((c) => (
+                    {courseTable.total === 0 && <NoResultsRow table={courseTable} colSpan={editable ? 7 : 6} />}
+                    {courseTable.rows.map((c, i) => (
                       <TableRow key={`${c.schemeId}:${c.courseId}`} className="align-top">
+                        <SerialCell n={courseTable.from + i} />
                         <TableCell className="min-w-56 whitespace-normal">
                           <Link
                             className="font-medium text-primary underline-offset-4 hover:underline"
@@ -423,6 +432,7 @@ function Department({ department, editable, programmes, schemes, courses, review
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <SerialHead />
                       <SortableHead table={reviewerTable} column="name">
                         Name
                       </SortableHead>
@@ -435,9 +445,10 @@ function Department({ department, editable, programmes, schemes, courses, review
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reviewerTable.total === 0 && <NoResultsRow table={reviewerTable} colSpan={editable ? 5 : 4} />}
-                    {reviewerTable.rows.map((r) => (
+                    {reviewerTable.total === 0 && <NoResultsRow table={reviewerTable} colSpan={editable ? 6 : 5} />}
+                    {reviewerTable.rows.map((r, i) => (
                       <TableRow key={r.id} className={r.isActive ? undefined : "opacity-60"}>
+                        <SerialCell n={reviewerTable.from + i} />
                         <TableCell className="font-medium">{r.name}</TableCell>
                         <TableCell>{reviewerCategoryLabels[r.category]}</TableCell>
                         <TableCell className="whitespace-normal">
@@ -617,6 +628,7 @@ function Meetings({ department, editable, meetings, schemes, reviewers }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <SerialHead />
                   <SortableHead table={table} column="when">
                     When and where
                   </SortableHead>
@@ -631,9 +643,10 @@ function Meetings({ department, editable, meetings, schemes, reviewers }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {table.total === 0 && <NoResultsRow table={table} colSpan={editable ? 5 : 4} />}
-                {table.rows.map((m) => (
+                {table.total === 0 && <NoResultsRow table={table} colSpan={editable ? 6 : 5} />}
+                {table.rows.map((m, i) => (
                   <TableRow key={m.id} className="align-top">
+                    <SerialCell n={table.from + i} />
                     <TableCell className="whitespace-normal">
                       <div className="font-medium">{formatDateTime(m.heldAt)}</div>
                       <div className="text-sm">

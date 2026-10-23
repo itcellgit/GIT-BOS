@@ -1,4 +1,11 @@
-import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
+import {
+  DataTablePagination,
+  DataTableToolbar,
+  NoResultsRow,
+  SerialCell,
+  SerialHead,
+  SortableHead,
+} from "@/components/data-table/data-table";
 import { EmptyState } from "@/components/layout/page-header";
 import { useDataTable } from "@/hooks/use-data-table";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +66,7 @@ export function AmendmentsSection({ scheme, amendments }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <SerialHead />
                   <SortableHead table={table} column="when">
                     When
                   </SortableHead>
@@ -75,9 +83,10 @@ export function AmendmentsSection({ scheme, amendments }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {table.total === 0 && <NoResultsRow table={table} colSpan={5} />}
-                {table.rows.map((a) => (
+                {table.total === 0 && <NoResultsRow table={table} colSpan={6} />}
+                {table.rows.map((a, i) => (
                   <TableRow key={a.id}>
+                    <SerialCell n={table.from + i} />
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDateTime(a.at)}</TableCell>
                     <TableCell className="font-medium">{a.summary}</TableCell>
                     <TableCell>{a.by ?? "—"}</TableCell>

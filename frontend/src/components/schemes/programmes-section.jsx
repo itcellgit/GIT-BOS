@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { EmptyState } from "@/components/layout/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SerialCell, SerialHead } from "@/components/data-table/data-table";
 /** Programmes the user may view, with their course counts under this scheme (loaded by the page). */
 export function ProgrammesSection({ scheme, programmes: visible }) {
   return (
@@ -15,14 +16,16 @@ export function ProgrammesSection({ scheme, programmes: visible }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <SerialHead />
                 <TableHead>Programme</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead className="text-right">Courses in this scheme</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map((p) => (
+              {visible.map((p, i) => (
                 <TableRow key={p.id}>
+                  <SerialCell n={i + 1} />
                   <TableCell>
                     <Link
                       to={`/schemes/${scheme.id}/programmes/${p.id}`}

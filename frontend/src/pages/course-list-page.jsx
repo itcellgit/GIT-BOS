@@ -25,6 +25,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SerialCell, SerialHead } from "@/components/data-table/data-table";
 
 import { CalendarRange, Copy, FileSpreadsheet, Pencil, Plus, Shuffle, Target, Trash2 } from "lucide-react";
 const groupFields = [
@@ -474,6 +475,7 @@ function SemesterTable({ semester, rows, groups, editable, renderEdit, renderDel
         <Table>
           <TableHeader>
             <TableRow>
+              <SerialHead />
               <TableHead>Course</TableHead>
               <TableHead>Category / format</TableHead>
               <TableHead>Teaching dept.</TableHead>
@@ -486,8 +488,9 @@ function SemesterTable({ semester, rows, groups, editable, renderEdit, renderDel
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <TableRow key={r.id} className="align-top">
+                <SerialCell n={i + 1} />
                 <TableCell className="min-w-56 whitespace-normal">
                   <div className="font-medium">{r.course.code}</div>
                   <div className="text-sm">{r.course.title}</div>

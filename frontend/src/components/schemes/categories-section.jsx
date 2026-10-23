@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SerialCell, SerialHead } from "@/components/data-table/data-table";
 import { addCreditPattern, deleteCategory, deleteCreditPattern, saveCategory } from "@/lib/actions";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 const formatOptions = formats.map((f) => ({ value: f, label: formatLabels[f] }));
@@ -74,6 +75,7 @@ export function CategoriesSection({ scheme, editable }) {
         <Table>
           <TableHeader>
             <TableRow>
+              <SerialHead />
               <TableHead>Category</TableHead>
               <TableHead>Marks (CIE / SEE)</TableHead>
               <TableHead>Formats</TableHead>
@@ -82,8 +84,9 @@ export function CategoriesSection({ scheme, editable }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {scheme.categories.map((c) => (
+            {scheme.categories.map((c, i) => (
               <TableRow key={c.id} className="align-top">
+                <SerialCell n={i + 1} />
                 <TableCell className="min-w-48 whitespace-normal">
                   <div className="font-medium">{c.code}</div>
                   <div className="text-xs text-muted-foreground">{c.name}</div>

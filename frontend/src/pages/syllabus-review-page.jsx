@@ -48,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SerialCell, SerialHead } from "@/components/data-table/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function SyllabusReviewPage() {
@@ -344,6 +345,7 @@ function VersionsTab({ path, data }) {
         <Table>
           <TableHeader>
             <TableRow>
+              <SerialHead />
               <TableHead>Version</TableHead>
               <TableHead>Event</TableHead>
               <TableHead>Note</TableHead>
@@ -352,8 +354,9 @@ function VersionsTab({ path, data }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {versions.map((v) => (
+            {versions.map((v, i) => (
               <TableRow key={v.id}>
+                <SerialCell n={i + 1} />
                 <TableCell className="font-medium">
                   {v.label} {v.official && <Badge variant="success">Official</Badge>}
                   <div className="text-xs font-normal text-muted-foreground">{v.statusLabel}</div>
@@ -658,6 +661,7 @@ function ExpertLinksTab({ path, data }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <SerialHead />
                 <TableHead>Expert</TableHead>
                 <TableHead>Version</TableHead>
                 <TableHead>Status</TableHead>
@@ -667,8 +671,9 @@ function ExpertLinksTab({ path, data }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.expertLinks.map((l) => (
+              {data.expertLinks.map((l, i) => (
                 <TableRow key={l.id}>
+                  <SerialCell n={i + 1} />
                   <TableCell className="whitespace-normal">
                     <div className="font-medium">{l.reviewer.name}</div>
                     <div className="text-xs text-muted-foreground">

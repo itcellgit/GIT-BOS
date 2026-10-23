@@ -199,6 +199,19 @@ export function SortableHead({ table, column, className, align = "left", childre
   );
 }
 
+/** "S.No": the first column of every table. */
+export function SerialHead() {
+  return <TableHead className="w-14 text-right">S.No</TableHead>;
+}
+
+/**
+ * The row's serial number, in the order shown. In a paged table pass `table.from + index`, so the
+ * numbering continues across pages.
+ */
+export function SerialCell({ n }) {
+  return <TableCell className="w-14 text-right text-muted-foreground tabular-nums">{n}</TableCell>;
+}
+
 /** Shown inside the table body when the search or filters leave no rows. */
 export function NoResultsRow({ table, colSpan }) {
   return (

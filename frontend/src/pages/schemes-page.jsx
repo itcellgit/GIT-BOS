@@ -8,6 +8,7 @@ import { QueryState } from "@/components/layout/query-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SerialCell, SerialHead } from "@/components/data-table/data-table";
 
 import { Plus } from "lucide-react";
 export function SchemesPage() {
@@ -87,6 +88,7 @@ export function SchemesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <SerialHead />
                       <TableHead>Scheme</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Effective from</TableHead>
@@ -95,8 +97,9 @@ export function SchemesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {schemes.map((s) => (
+                    {schemes.map((s, i) => (
                       <TableRow key={s.id}>
+                        <SerialCell n={i + 1} />
                         <TableCell>
                           <Link to={`/schemes/${s.id}`} className="font-medium underline-offset-4 hover:underline">
                             {s.name}

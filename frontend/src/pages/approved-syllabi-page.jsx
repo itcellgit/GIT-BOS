@@ -4,7 +4,14 @@ import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { useApiQuery } from "@/hooks/use-api";
 import { useDataTable } from "@/hooks/use-data-table";
 import { distinctOptions } from "@/lib/data-table";
-import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
+import {
+  DataTablePagination,
+  DataTableToolbar,
+  NoResultsRow,
+  SerialCell,
+  SerialHead,
+  SortableHead,
+} from "@/components/data-table/data-table";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +151,7 @@ function SchemeSyllabi({ schemes, schemeId, onSchemeChange }) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <SerialHead />
                     <SortableHead table={table} column="code">
                       Course
                     </SortableHead>
@@ -160,11 +168,12 @@ function SchemeSyllabi({ schemes, schemeId, onSchemeChange }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {table.total === 0 && <NoResultsRow table={table} colSpan={5} />}
-                  {table.rows.map((c) => {
+                  {table.total === 0 && <NoResultsRow table={table} colSpan={6} />}
+                  {table.rows.map((c, i) => {
                     const pdf = `/api/schemes/${schemeId}/approved-syllabi/${c.courseId}/pdf`;
                     return (
                       <TableRow key={c.courseId}>
+                        <SerialCell n={table.from + i} />
                         <TableCell className="whitespace-normal">
                           <div className="font-medium">{c.code}</div>
                           <div>{c.title}</div>

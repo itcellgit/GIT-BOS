@@ -3,7 +3,14 @@ import { roleLabels } from "@acp/shared/domain/auth/permissions";
 import { roles } from "@acp/shared/schemas/config";
 import { useApiQuery } from "@/hooks/use-api";
 import { addRole, removeRole, resetPasswordToDefault, saveUser, setInitialPassword } from "@/lib/actions";
-import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
+import {
+  DataTablePagination,
+  DataTableToolbar,
+  NoResultsRow,
+  SerialCell,
+  SerialHead,
+  SortableHead,
+} from "@/components/data-table/data-table";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { useDataTable } from "@/hooks/use-data-table";
 import { distinctOptions } from "@/lib/data-table";
@@ -147,6 +154,7 @@ function Users({ users, departments, actorIsSuperAdmin, defaultPassword }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <SerialHead />
                 <SortableHead table={table} column="name">
                   Name
                 </SortableHead>
@@ -160,13 +168,14 @@ function Users({ users, departments, actorIsSuperAdmin, defaultPassword }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {table.total === 0 && <NoResultsRow table={table} colSpan={4} />}
-              {table.rows.map((u) => {
+              {table.total === 0 && <NoResultsRow table={table} colSpan={5} />}
+              {table.rows.map((u, i) => {
                 const isSuperAdmin = u.roles.some((r) => r.role === "SUPER_ADMIN");
                 // Ordinary Administrators can see Super Admin accounts but not change them.
                 const locked = isSuperAdmin && !actorIsSuperAdmin;
                 return (
                   <TableRow key={u.id} className={u.isActive ? undefined : "opacity-60"}>
+                    <SerialCell n={table.from + i} />
                     <TableCell>
                       <div className="font-medium">{u.name}</div>
                       <div className="text-xs text-muted-foreground">

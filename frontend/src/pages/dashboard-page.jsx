@@ -9,7 +9,14 @@ import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { useApiQuery } from "@/hooks/use-api";
 import { useDataTable } from "@/hooks/use-data-table";
 import { distinctOptions } from "@/lib/data-table";
-import { DataTablePagination, DataTableToolbar, NoResultsRow, SortableHead } from "@/components/data-table/data-table";
+import {
+  DataTablePagination,
+  DataTableToolbar,
+  NoResultsRow,
+  SerialCell,
+  SerialHead,
+  SortableHead,
+} from "@/components/data-table/data-table";
 import { cn } from "@/lib/utils";
 import { EmptyState, PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
@@ -276,6 +283,7 @@ function CountsTable({ groups, grouping }) {
       <Table>
         <TableHeader>
           <TableRow>
+            <SerialHead />
             <TableHead>{grouping.label}</TableHead>
             {progressSteps.map((s) => (
               <TableHead key={s} className="text-right whitespace-normal">
@@ -286,8 +294,9 @@ function CountsTable({ groups, grouping }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {groups.map((g) => (
+          {groups.map((g, i) => (
             <TableRow key={g.key}>
+              <SerialCell n={i + 1} />
               <TableCell className="font-medium">{grouping.name(g.key)}</TableCell>
               {progressSteps.map((s) => (
                 <TableCell key={s} className="text-right tabular-nums">
@@ -375,6 +384,7 @@ function CourseTable({ rows, schemeId, filter, onClear }) {
         <Table>
           <TableHeader>
             <TableRow>
+              <SerialHead />
               <SortableHead table={table} column="code">
                 Course
               </SortableHead>
@@ -394,9 +404,10 @@ function CourseTable({ rows, schemeId, filter, onClear }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {table.total === 0 && <NoResultsRow table={table} colSpan={6} />}
-            {table.rows.map((r) => (
+            {table.total === 0 && <NoResultsRow table={table} colSpan={7} />}
+            {table.rows.map((r, i) => (
               <TableRow key={r.courseId}>
+                <SerialCell n={table.from + i} />
                 <TableCell>
                   <Link to={`/syllabi/${schemeId}/${r.courseId}`} className="font-medium hover:underline">
                     <span className="tabular-nums">{r.code}</span> — {r.title}
