@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { signIn, unique } from "./helpers.js";
+import { signIn, unique, waitForMail } from "./helpers.js";
 
 // The full review path (README §13, workflow tests): V1.0 → inputs → V2.0 → V3.0 → V4.0 approved →
 // unlock → V4.1 → re-approved. Versions can never be deleted, so each run adds its own course to the
@@ -188,8 +188,12 @@ test("a syllabus goes V1.0 → V4.0 with an expert's link review, is unlocked an
   await expect(expert.frameLocator("iframe").getByText("Deadlocks and deadlock avoidance")).toBeVisible();
   await pickSelect(expert, "Section", "Unit 3");
   await expert.getByLabel("Comment").fill("Include a case study on Linux scheduling in unit 3.");
+  const commentedAt = Date.now() - 1000;
   await expert.getByRole("button", { name: "Save comment" }).click();
   await expect(expert.getByText("Your comments (1)")).toBeVisible();
+
+  // The BoS Coordinator is emailed about the comment (one digest for the expert's comments).
+  await waitForMail("bos.cse@example.edu", commentedAt, /: 1 expert comment received/);
 
   // The comment arrives as an expert-stage input; the expert stage cannot close until it is answered.
   await page.getByRole("tab", { name: "Inputs" }).click();
@@ -223,8 +227,12 @@ test("a syllabus goes V1.0 → V4.0 with an expert's link review, is unlocked an
   await expect(page.getByText("Academic Council stage")).toBeVisible();
   await page.getByRole("button", { name: "Close & approve" }).click();
   await dialog(page).getByLabel("Meeting reference").fill("AC/2026/14, item 5");
+  const approvedAt = Date.now() - 1000;
   await dialog(page).getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText("Official: V4.0")).toBeVisible();
+  // The HoD is told that the syllabus is now official.
+  const approvedMail = await waitForMail("hod.cse@example.edu", approvedAt, /approved: V4\.0 is the official syllabus/);
+  expect(approvedMail.text).toContain("AC/2026/14, item 5");
   await expect(page.getByLabel("Unit – I", { exact: true })).toBeDisabled();
 
   // Unlock for a correction → V4.1, approved again; V4.0 stays official until then.

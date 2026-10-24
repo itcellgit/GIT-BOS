@@ -3,6 +3,7 @@ import { PortalLayout } from "@/components/layout/portal-layout";
 import { RequireAuth } from "@/components/layout/require-auth";
 import { AccountPage } from "@/pages/account-page";
 import { AdminDepartmentsPage } from "@/pages/admin-departments-page";
+import { AdminEmailLogPage } from "@/pages/admin-email-log-page";
 import { AdminUsersPage } from "@/pages/admin-users-page";
 import { ApprovedSyllabiPage } from "@/pages/approved-syllabi-page";
 import { CourseListPage } from "@/pages/course-list-page";
@@ -44,6 +45,7 @@ export function App() {
           <Route path="departments/:code" element={<DepartmentPage />} />
           <Route path="admin/users" element={<AdminUsersPage />} />
           <Route path="admin/departments" element={<AdminDepartmentsPage />} />
+          <Route path="admin/emails" element={<AdminEmailLogPage />} />
           <Route path="no-access" element={<NoAccessPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

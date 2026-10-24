@@ -22,7 +22,7 @@ test("Dean Academics creates a draft scheme by copying 2025, then deletes it", a
   await expect(page.getByText(`Test Scheme ${code}`)).toHaveCount(0);
 });
 test("Administrator adds a user and gives them a department role", async ({ page }) => {
-  await signIn(page, "admin@example.edu");
+  await signIn(page, "it.admin@example.edu");
   await page.goto("/admin/users");
   const email = `${unique("e2e").toLowerCase()}@example.edu`;
   await page.getByRole("button", { name: "Add user" }).click();

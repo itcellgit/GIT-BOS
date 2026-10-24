@@ -13,6 +13,7 @@ import { db } from "../infra/db.js";
  * @property {boolean} isActive
  * @property {boolean} hasPassword            can sign in with a password
  * @property {boolean} passwordChangeRequired must choose a new password before doing anything else
+ * @property {boolean} emailNotifications     receives workflow emails
  * @property {{role: string, departmentId: string|null, departmentCode: string|null}[]} roles
  */
 
@@ -36,6 +37,7 @@ export async function loadCurrentUser(req) {
     isActive: user.isActive,
     hasPassword: user.accounts.length > 0,
     passwordChangeRequired: user.passwordChangeRequired,
+    emailNotifications: user.emailNotifications,
     roles: user.roles.map((r) => ({
       role: r.role,
       departmentId: r.departmentId,

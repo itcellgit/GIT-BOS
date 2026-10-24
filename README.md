@@ -148,6 +148,7 @@ Where these documents conflict with the decisions below, **the decisions below w
 | D18 | **Reset to the default password** (23 Oct 2026): a Super Admin can reset any other active user's password to `DEFAULT_RESET_PASSWORD` ("Password@123" unless set) from the Users page. The user is signed out everywhere, then signs in with **Sign in with password**, and is **not** forced to change it (decided by the IT Cell). Every reset is audit-logged. This extends D15: passwords are no longer limited to Super Admins, but only a Super Admin can give someone a password, and only Super Admins can reset their own by email. |
 | D19 | **Approved syllabi for everyone** (23 Oct 2026): every user with a role (any department) can list a scheme's approved syllabi and view or download each one (sidebar **Approved syllabi**, or **Approved syllabi** on a scheme page). Only the official version approved by the Academic Council is shared, served from its frozen PDF; working copies, versions and review history stay limited to the department (`syllabus.view`). Permission `syllabus.viewApproved`; API `GET /api/schemes/:schemeId/approved-syllabi` and `…/:courseId/pdf` (`?download=1`). A syllabus reopened for a correction keeps showing its approved copy, marked "Correction in progress". |
 | D20 | **List tables: search, filters, sorting, pagination** (23 Oct 2026). One shared implementation: `frontend/src/lib/data-table.js` (pure query rules, unit-tested), `hooks/use-data-table.js` (state kept in the URL per table, e.g. `?users.q=asha&users.page=2`, so Back, refresh and shared links keep the view) and `components/data-table/` (toolbar, sortable headers, pagination). Used on Users, Department courses / reviewers / meetings, Dashboard courses, Approved syllabi and scheme amendments. Filtering is client-side (the lists are institution-sized); scheme course lists keep their official order and are not sorted or paged. |
+| D21 | **Email notifications through an outbox** (24 Oct 2026, Phase 5): workflow events write `notification` rows in the same transaction as the change, and a sender in the API process emails them (digests for inputs, expert comments and *Needs revision*; retries; per-user opt-out under *My account*; *Email log* for administrators). Chosen over pg-boss: no new dependency, and a notification exists exactly when its change commits. See Phase 5 in §12. |
 
 ---
 
@@ -432,7 +433,7 @@ Each rule is either an **error** (blocks submission) or a **warning** (shown in 
 | Authorisation | One `can(user, action, resource)` function in `shared/`, with department scoping. The API checks it on every request; the React app uses the same function only to show or hide buttons | Permissions live in one place |
 | HTML → PDF | **Gotenberg 8** (headless Chromium behind an HTTP API) in production; Playwright's Chromium in development. Both receive the HTML from `shared/src/print/` with the fonts embedded | Recent Chromium supports `@page` sizes, margins and margin boxes for running headers and "Page X of Y" |
 | Print font | **Carlito** (matches Calibri's letter widths) | Calibri cannot legally be installed on Linux |
-| Background jobs (Phase 1+) | **pg-boss** (job queue stored in PostgreSQL) | Compiled books, link checks, emails, with **no Redis to run** |
+| Background jobs (Phase 1+) | Emails: an **outbox table** sent by the API process (D21). **pg-boss** (job queue stored in PostgreSQL) remains the option for heavier jobs | Compiled books, link checks, emails, with **no Redis to run** |
 | Excel import/export | **ExcelJS** | Scheme and course-list import |
 | Email | **Nodemailer** through institutional SMTP or Brevo / SES | Sign-in codes, password reset, notifications |
 | Testing | **Vitest** (rules, permissions, password policy), **Supertest** (API), **Playwright** (end-to-end in a real browser) | Covers rules, API and screens |
@@ -662,7 +663,7 @@ Each phase ends with a demo to the BoS Coordinator or Dean Academics and a short
 - Unlock with reason; minor versions — **✅** only an approved syllabus is locked, so *Unlock* applies after approval; the correction is saved as V4.1 and *Record approval* makes it official (V4.0 stays official until then)
 - **Action Taken report** generation — **✅** `shared/src/print/action-taken-layout.js`, one report per stage with the four headings, preview and PDF; unlocks appear as extra rows
 - Tests: workflow and print unit tests; `e2e/review-workflow.spec.js` runs V1.0 → V4.0 → unlock → V4.1 in the browser (each run adds its own "E2E workflow test course" in semester 8, because versions cannot be deleted)
-- **Not yet:** expert links (Phase 3); notifications by email; a check of the Action Taken layout against `Action Taken Format.docx` (not available on the development machine)
+- **Not yet:** a check of the Action Taken layout against `Action Taken Format.docx` (not available on the development machine)
 - **Accept when:** one syllabus goes V1.0 → V4.0 with inputs at every stage and correct Action Taken reports, and an unlock produces V4.1.
 
 ### Phase 2A — AI assistance (built alongside Phase 2; see §15)
@@ -696,12 +697,21 @@ Build the workflow first, then add AI on top of it in this order:
 - **Accept when:** an external expert comments through the link, and one course of each format produces a correct PDF.
 
 ### Phase 4 — Programme level and scheme change
+**Status: ✅ built 23 Oct 2026; verified 24 Oct 2026** — the full end-to-end suite passes on a fresh database, including `e2e/dashboard.spec.js` and `e2e/scheme-change.spec.js` (clone → copy course list → carry a syllabus forward as V1.0 → amend the scheme)
 - Dashboards: status by department, programme and semester
 - Compiled syllabus book
 - Scheme clone, carrying old syllabi forward into a new scheme, amendments with "needs revision" flags
 - **Accept when:** a cloned "test 2028" scheme is published and a 2025 syllabus is carried forward into it as V1.0.
 
 ### Phase 5 — Pilot and rollout
+- **Email notifications — ✅ built 24 Oct 2026** (D21; carried over from Phase 2)
+  - who is emailed: the faculty member assigned to a course; BoS Coordinators when a syllabus is submitted and when every input of a stage has an action taken (once per stage); the course team when inputs or expert comments arrive, a stage closes, the syllabus is unlocked, or a scheme change flags it *Needs revision*; course team, BoS Coordinators and HoD on approval. Never the person who made the change; never an inactive user or one who turned emails off (*My account*)
+  - inputs, expert comments and *Needs revision* flags are **digests**: rows of one person and group wait `NOTIFY_DIGEST_SECONDS` (10 min in production) and go out as one email ("3 new review inputs to answer")
+  - outbox table `notification`, written in the same transaction as the change; the API process sends due rows every `NOTIFY_INTERVAL_SECONDS` (30 s in production), claiming them with `FOR UPDATE SKIP LOCKED`; a failure is retried after 1, 5, 15 and 60 minutes, then marked failed; a claim left by a crashed process is released after 10 minutes. `NOTIFY_SENDER=off` leaves sending to another process
+  - message texts: `backend/src/services/notification-messages.js` (unit-tested); sender and recipients: `services/notifications.js`
+  - **Administration → Email log**: every notification with its status, error and attempts; a failed email can be sent again
+  - tests: `notification-messages.test.js`; `e2e/notifications.spec.js` (assignment email, the email log, turning emails off); `review-workflow.spec.js` checks the expert-comment digest to the BoS Coordinator and the approval email to the HoD
+  - **before the pilot:** production needs working SMTP (`SMTP_*` in `.env`); with Google Workspace, use an app password of a sending account such as itcell@git.edu
 - **Pilot with CSE** for one full review cycle; fix issues; train BoS Coordinators
 - Department-by-department rollout; optional one-time import of existing syllabi
 - AI-13 help assistant and AI-14 Word import (§15)

@@ -11,6 +11,7 @@ import { handle } from "../http/handler.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
 import { openExpertLink } from "../services/expert-links.js";
+import { notifyWorkflow } from "../services/notifications.js";
 import { buildEditorData, loadSyllabusContext } from "../services/syllabi.js";
 
 export const expertRouter = Router();
@@ -82,6 +83,18 @@ expertRouter.post(
             details: { linkId: link.id, reviewer: link.reviewer.name, section: body.sectionRef },
           },
           tx,
+        );
+        const syllabus = await tx.syllabus.findUnique({
+          where: { id: link.syllabusId },
+          select: { id: true, scheme: { select: { id: true, name: true } }, course: true },
+        });
+        await notifyWorkflow(
+          tx,
+          { user: null, syllabus, scheme: syllabus.scheme, course: syllabus.course },
+          "expertComment",
+          {
+            reviewer: link.reviewer.name,
+          },
         );
       });
     },

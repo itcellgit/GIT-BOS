@@ -3,7 +3,7 @@ import { Router } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import { APIError } from "better-auth/api";
 import { departmentsWithRole } from "@acp/shared/domain/auth/permissions";
-import { changePasswordSchema, resetPasswordSchema } from "@acp/shared/schemas/account";
+import { changePasswordSchema, notificationPreferenceSchema, resetPasswordSchema } from "@acp/shared/schemas/account";
 import { auth, emailCodeSignIn, enabledSocialProviders, googleSignInDomain } from "../auth/auth.js";
 import { assertSignedIn } from "../auth/session.js";
 import { UserError } from "../errors.js";
@@ -108,6 +108,35 @@ meRouter.post(
     },
     "Password changed. You have been signed out on other devices.",
   ),
+);
+
+/** Turns the signed-in user's workflow emails on or off (My account). */
+meRouter.put(
+  "/account/notifications",
+  handle(notificationPreferenceSchema, async ({ emailNotifications }, req, res) => {
+    const user = assertSignedIn(req);
+    await db.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { emailNotifications } });
+      // Emails already queued for later are dropped too.
+      if (!emailNotifications) {
+        await tx.notification.updateMany({
+          where: { userId: user.id, status: "PENDING" },
+          data: { status: "SKIPPED" },
+        });
+      }
+      await writeAudit(
+        {
+          actorId: user.id,
+          action: "user.emailNotifications",
+          entityType: "User",
+          entityId: user.id,
+          details: { emailNotifications },
+        },
+        tx,
+      );
+    });
+    res.locals.message = emailNotifications ? "Email notifications turned on" : "Email notifications turned off";
+  }),
 );
 
 /** "Forgot password": sets a new password using the code emailed to a Super Admin. */

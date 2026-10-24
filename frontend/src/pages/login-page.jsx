@@ -82,7 +82,7 @@ export function LoginPage() {
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Academic Curriculum Portal</h1>
           </div>
           <div className="hidden space-y-1.5 lg:block">
-            <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Sign in to the portal</h1>
             <p className="text-sm text-muted-foreground">Sign in with your institutional Google account.</p>
           </div>
           <LoginForm

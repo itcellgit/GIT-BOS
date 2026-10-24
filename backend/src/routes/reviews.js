@@ -34,6 +34,7 @@ import { resolveRevisionFlags } from "../services/amendments.js";
 import { writeAudit } from "../services/audit.js";
 import { frozenSyllabusPdf, isApprovedVersion } from "../services/documents.js";
 import { expertLinkUrl, linkStatus, newToken } from "../services/expert-links.js";
+import { notifyWorkflow } from "../services/notifications.js";
 import { sendMail } from "../infra/mail.js";
 import {
   buildEditorData,
@@ -320,6 +321,7 @@ reviewsRouter.post(
           committedRevision: syllabus.revision,
         });
         await audit(tx, ctx, "syllabus.submit", { version: v.label });
+        await notifyWorkflow(tx, ctx, "submitted", { version: v.label });
       });
       return { label: versionLabel(version.major, version.minor) };
     },
@@ -426,6 +428,14 @@ reviewsRouter.post(
         version: v?.label ?? null,
         ...(finalStage ? { approvedOn: parsed.data.approvedOn, reference: parsed.data.reference } : {}),
       });
+      await notifyWorkflow(
+        tx,
+        ctx,
+        finalStage ? "approved" : "stageClosed",
+        finalStage
+          ? { version: v.label, approvedOn: parsed.data.approvedOn, reference: parsed.data.reference }
+          : { fromStage: syllabus.stage, toStage: next, version: v?.label ?? null },
+      );
       return { label: v?.label ?? data.workflow.label, versionId: v?.id };
     });
     if (finalStage) freezeAfterApproval(ctx, versionId);
@@ -457,6 +467,7 @@ reviewsRouter.post(
           },
         });
         await audit(tx, ctx, "syllabus.unlock", { from: syllabus.officialVersion?.label, reason });
+        await notifyWorkflow(tx, ctx, "unlocked", { from: syllabus.officialVersion?.label, reason });
       });
     },
     "Unlocked. The approved version stays official until the correction is approved.",
@@ -490,6 +501,11 @@ reviewsRouter.post(
       });
       await recordApproval(tx, ctx, v.id, body);
       await audit(tx, ctx, "syllabus.approve", { version: v.label, reference: body.reference });
+      await notifyWorkflow(tx, ctx, "approved", {
+        version: v.label,
+        approvedOn: body.approvedOn,
+        reference: body.reference,
+      });
       return { label: v.label, versionId: v.id };
     });
     freezeAfterApproval(ctx, versionId);
@@ -651,6 +667,7 @@ reviewsRouter.post(
           stage: syllabus.stage,
           section: body.sectionRef,
         });
+        await notifyWorkflow(tx, ctx, "inputRecorded", { stage: syllabus.stage, section: body.sectionRef });
       });
     },
     "Input recorded",
@@ -702,6 +719,7 @@ reviewsRouter.put(
       await db.$transaction(async (tx) => {
         await tx.reviewInput.update({ where: { id: input.id }, data: { ...body, respondedById: ctx.user.id } });
         await audit(tx, ctx, "reviewInput.respond", { inputId: input.id, decision: body.decision });
+        await notifyWorkflow(tx, ctx, "inputAnswered", { stage: input.stage });
       });
     },
     "Action taken saved",

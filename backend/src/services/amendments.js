@@ -3,6 +3,7 @@
 // A flag is resolved by the next version of the syllabus, or by the BoS Coordinator ("no change needed").
 import { summarizeIssues } from "@acp/shared/domain/syllabi/validate";
 import { db } from "../infra/db.js";
+import { queueNotification } from "./notifications.js";
 import { buildEditorData, loadSyllabusContext } from "./syllabi.js";
 
 /** Prisma `where` for the syllabi a scope reaches (see amendmentScope in shared/domain/schemes). */
@@ -24,7 +25,12 @@ function scopeWhere(schemeId, scope) {
  */
 export async function recordAmendment(tx, { schemeId, actorId, action, summary, scope, details }) {
   const where = scopeWhere(schemeId, scope);
-  const syllabi = where ? await tx.syllabus.findMany({ where, select: { id: true } }) : [];
+  const syllabi = where
+    ? await tx.syllabus.findMany({
+        where,
+        select: { id: true, courseId: true, course: { select: { code: true, title: true } } },
+      })
+    : [];
   const amendment = await tx.schemeAmendment.create({
     data: {
       schemeId,
@@ -39,6 +45,28 @@ export async function recordAmendment(tx, { schemeId, actorId, action, summary, 
     await tx.syllabusRevisionFlag.createMany({
       data: syllabi.map((s) => ({ syllabusId: s.id, amendmentId: amendment.id })),
     });
+    // The course teams hear about it in one digest per person, however many syllabi and changes.
+    const scheme = await tx.scheme.findUnique({ where: { id: schemeId }, select: { name: true } });
+    const teams = await tx.courseAssignment.findMany({
+      where: { schemeId, courseId: { in: syllabi.map((s) => s.courseId) } },
+      select: { userId: true, courseId: true },
+    });
+    for (const s of syllabi) {
+      await queueNotification(tx, {
+        kind: "needsRevision",
+        userIds: teams.filter((t) => t.courseId === s.courseId).map((t) => t.userId),
+        actorId,
+        payload: {
+          course: s.course,
+          schemeId,
+          schemeName: scheme.name,
+          summary,
+          path: `/syllabi/${schemeId}/${s.courseId}`,
+        },
+        groupKey: `revision:${schemeId}`,
+        digest: true,
+      });
+    }
   }
   return amendment.id;
 }

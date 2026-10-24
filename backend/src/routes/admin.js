@@ -315,3 +315,62 @@ adminRouter.post(
     "Password reset to the default. The user can now sign in with it.",
   ),
 );
+
+// --- Email log (notifications) -------------------------------------------------------------------
+
+/** The latest workflow emails and their delivery status, for checking delivery during the pilot. */
+adminRouter.get(
+  "/notifications",
+  handle(null, async (_data, req) => {
+    assertPermission(req, "users.manage");
+    const [rows, counts] = await Promise.all([
+      db.notification.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 1000,
+        include: { user: { select: { name: true, email: true } } },
+      }),
+      db.notification.groupBy({ by: ["status"], _count: { _all: true } }),
+    ]);
+    return {
+      counts: Object.fromEntries(counts.map((c) => [c.status, c._count._all])),
+      notifications: rows.map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        status: n.status,
+        recipient: n.user,
+        course: n.payload?.course?.code ?? null,
+        version: n.payload?.version ?? null,
+        attempts: n.attempts,
+        lastError: n.lastError,
+        createdAt: n.createdAt,
+        sendAfter: n.sendAfter,
+        sentAt: n.sentAt,
+      })),
+    };
+  }),
+);
+
+/** Sends a failed email again (after fixing SMTP settings, for example). */
+adminRouter.post(
+  "/notifications/:id/retry",
+  handle(
+    null,
+    async (_data, req) => {
+      const actor = assertPermission(req, "users.manage");
+      const n = await db.notification.findUnique({ where: { id: req.params.id } });
+      if (!n) throw new NotFoundError("Notification not found.");
+      if (n.status !== "FAILED") throw new UserError("Only a failed email can be sent again.");
+      await db.$transaction(async (tx) => {
+        await tx.notification.update({
+          where: { id: n.id },
+          data: { status: "PENDING", attempts: 0, sendAfter: new Date(), lastError: null },
+        });
+        await writeAudit(
+          { actorId: actor.id, action: "notification.retry", entityType: "Notification", entityId: n.id },
+          tx,
+        );
+      });
+    },
+    "The email will be sent again in a moment.",
+  ),
+);

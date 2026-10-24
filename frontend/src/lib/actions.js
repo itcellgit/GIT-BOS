@@ -85,3 +85,7 @@ export const resolveRevision = (path, values) => api.post(`${path}/revision-flag
 // --- Expert review page (public; the link's token is the credential) -----------------------------------
 export const addExpertComment = (token, values) => api.post(`/expert/${token}/comments`, values);
 export const deleteExpertComment = (token, inputId) => api.delete(`/expert/${token}/comments/${inputId}`);
+
+// --- My account and email ------------------------------------------------------------------------
+export const setEmailNotifications = (emailNotifications) => api.put("/account/notifications", { emailNotifications });
+export const retryNotification = (id) => api.post(`/admin/notifications/${id}/retry`, {});

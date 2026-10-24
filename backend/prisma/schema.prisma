@@ -26,6 +26,8 @@ model User {
   isActive               Boolean  @default(true)
   /// Set when a password was given to the user (e.g. from .env); they must choose their own at next sign-in.
   passwordChangeRequired Boolean  @default(false)
+  /// Workflow emails (assignments, submissions, inputs, stage changes, approvals). The user can turn them off.
+  emailNotifications     Boolean  @default(true)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -44,6 +46,7 @@ model User {
   approvals         SyllabusApproval[]
   amendments        SchemeAmendment[]
   flagsResolved     SyllabusRevisionFlag[]
+  notifications     Notification[]
 
   @@map("user")
 }
@@ -686,6 +689,43 @@ model Reviewer {
 // ---------------------------------------------------------------------------
 
 /// Append-only record of state changes and configuration changes.
+// ---------------------------------------------------------------------------
+// Email notifications (Phase 5, README §7 "Notifications"): an outbox. A workflow change writes its
+// notifications in the same transaction; a sender in the API process emails them when due, groups
+// rows that share a `groupKey` into one digest, and retries failures.
+// ---------------------------------------------------------------------------
+
+enum NotificationStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED // gave up after the maximum number of attempts
+  SKIPPED // recipient inactive or has turned emails off by the time it was due
+}
+
+model Notification {
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// What happened, e.g. "assignment", "submitted", "inputs", "stageClosed" (services/notification-messages.js).
+  kind       String
+  /// Rows with the same key that are due together are sent as one email ("3 new review inputs").
+  groupKey   String?
+  /// Facts for the message: course code and title, scheme, version, stage, links…
+  payload    Json
+  status     NotificationStatus @default(PENDING)
+  sendAfter  DateTime           @default(now())
+  attempts   Int                @default(0)
+  lastError  String?
+  claimedAt  DateTime?
+  sentAt     DateTime?
+  createdAt  DateTime           @default(now())
+
+  @@index([status, sendAfter])
+  @@index([userId, createdAt])
+  @@map("notification")
+}
+
 model AuditLog {
   id           String   @id @default(cuid())
   at           DateTime @default(now())

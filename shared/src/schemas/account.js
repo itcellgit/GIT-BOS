@@ -40,3 +40,6 @@ export const initialPasswordSchema = z
     confirmPassword: z.string(),
   })
   .refine((v) => v.password === v.confirmPassword, { path: ["confirmPassword"], message: "Passwords do not match" });
+
+/** My account: workflow emails on or off. */
+export const notificationPreferenceSchema = z.object({ emailNotifications: z.boolean() });

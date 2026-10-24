@@ -2,6 +2,7 @@ import { Link, useOutletContext } from "react-router";
 import { ChevronLeft, KeyRound } from "lucide-react";
 import { roleLabels } from "@acp/shared/domain/auth/permissions";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
+import { NotificationSettings } from "@/components/auth/notification-settings";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import { ThemeMenu } from "@/components/layout/theme-menu";
@@ -74,10 +75,15 @@ export function AccountPage() {
               ))}
             </div>
             <p className="text-muted-foreground">
-              Sign-in: {me.hasPassword ? "email and password, or a one-time email code" : "one-time email code"}
+              Sign-in:{" "}
+              {me.hasPassword
+                ? "Google (institutional account), or email and password"
+                : "Google (institutional account)"}
             </p>
           </CardContent>
         </Card>
+
+        {!me.passwordChangeRequired && <NotificationSettings me={me} />}
 
         {!me.hasPassword && me.roles.some((r) => r.role === "SUPER_ADMIN") && (
           <Alert>

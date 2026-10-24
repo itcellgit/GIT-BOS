@@ -24,6 +24,20 @@ export async function waitForCode(email, after, pattern) {
     .not.toBeNull();
   return code;
 }
+/**
+ * Waits for a workflow email to `email` sent after `after` whose subject matches `subject`, and
+ * returns it. The API sends due notifications every few seconds; digests wait NOTIFY_DIGEST_SECONDS.
+ */
+export async function waitForMail(email, after, subject, timeout = 40_000) {
+  let mail = null;
+  await expect
+    .poll(async () => (mail = (await mailsTo(email, after)).find((m) => subject.test(m.subject)) ?? null), {
+      timeout,
+      message: `no email matching ${subject} was sent to ${email}`,
+    })
+    .not.toBeNull();
+  return mail;
+}
 /** Signs in a demo account through the development-only email-code form (code from the dev mail log). */
 export async function signIn(page, email) {
   const started = Date.now() - 1000;

@@ -72,6 +72,9 @@ test("the editor checks the syllabus against the scheme rules as faculty type", 
   await openFromHome(page);
   const checks = page.locator("#checks");
   await expect(checks.getByText(/\d+ errors?/)).toBeVisible();
+  // A new syllabus has many issues, so the list starts collapsed: open it.
+  const showList = checks.getByText("Show the list");
+  if (await showList.isVisible()) await showList.click();
 
   // A unit-hours total that does not match the scheme is reported, and the message follows the input.
   await page.locator("#unit-0-hours").fill("40");
@@ -104,7 +107,7 @@ test("the print preview shows the saved syllabus, and the PDF downloads", async 
   await page.getByRole("button", { name: "Preview & PDF" }).click();
   await expect(page.getByRole("heading", { name: /1BCS304 — print preview/ })).toBeVisible();
   const sheet = page.frameLocator("iframe[title^='Print preview']");
-  await expect(sheet.getByText("DATA STRUCTURES", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("DATA STRUCTURES AND APPLICATIONS", { exact: true })).toBeVisible();
   await expect(sheet.getByText(`Unit – III: ${title}`)).toBeVisible();
   await expect(sheet.getByText("Scheme of Semester End Examination (SEE)")).toBeVisible();
 

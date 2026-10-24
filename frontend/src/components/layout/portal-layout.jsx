@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useOutletContext } from "react-router";
-import { Building2, ChartBar, FileCheck2, LayoutDashboard, Layers, Menu, Network, Users, X } from "lucide-react";
+import {
+  Building2,
+  ChartBar,
+  FileCheck2,
+  Layers,
+  LayoutDashboard,
+  MailCheck,
+  Menu,
+  Network,
+  Users,
+  X,
+} from "lucide-react";
 import { can, roleLabels } from "@acp/shared/domain/auth/permissions";
 import { BrandMark } from "@/components/layout/brand-mark";
 import { NavLink } from "@/components/layout/nav-link";
@@ -109,6 +120,9 @@ export function PortalLayout() {
               </NavLink>
               <NavLink href="/admin/departments" icon={Network}>
                 Departments
+              </NavLink>
+              <NavLink href="/admin/emails" icon={MailCheck}>
+                Email log
               </NavLink>
             </NavGroup>
           )}

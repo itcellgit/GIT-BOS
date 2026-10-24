@@ -135,6 +135,7 @@ test("a Super Admin makes another Super Admin and sets their initial password", 
 
   // Clean up: deactivate the test account (another active Super Admin remains).
   await page.reload();
+  await searchTable(page, email);
   await row.getByRole("button", { name: "Edit" }).click();
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("Active (can sign in)").click();

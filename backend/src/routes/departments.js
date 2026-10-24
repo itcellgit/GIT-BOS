@@ -10,6 +10,7 @@ import { NotFoundError, PermissionError, UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
+import { queueNotification } from "../services/notifications.js";
 
 export const departmentsRouter = Router();
 
@@ -274,6 +275,19 @@ departmentsRouter.post(
           },
           tx,
         );
+        await queueNotification(tx, {
+          kind: "assignment",
+          userIds: [data.userId],
+          actorId: actor.id,
+          payload: {
+            course: { code: course.code, title: course.title },
+            schemeId,
+            schemeName: scheme.name,
+            role: data.role,
+            by: actor.name,
+            path: `/syllabi/${schemeId}/${courseId}`,
+          },
+        });
       });
     },
     "Faculty assigned",
