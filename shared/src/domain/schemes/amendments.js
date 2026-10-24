@@ -66,7 +66,7 @@ export function amendmentSummary(action, change = {}) {
     case "creditPattern":
       return `Credit pattern ${change.pattern ?? ""} ${verb} in ${change.code ?? "a category"}`.replace(/\s+/g, " ");
     case "format":
-      return `${formatLabels[change.format] ?? "Format"} format settings changed`;
+      return `${formatLabels[change.format] ?? "Format"} format ${op === "sections" ? "section layout" : "settings"} changed`;
     case "outcome":
       return `${change.kind ?? "Outcome"} ${change.code ?? ""} ${verb}`.replace(/\s+/g, " ");
     case "bloom":

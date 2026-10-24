@@ -1,4 +1,4 @@
-// Compiled syllabus book (Phase 4, README §8): the whole programme or one semester, as one PDF.
+// Compiled syllabus book (Phase 4, README §8): a whole programme (or scheme) or one semester, as one PDF.
 import { useState } from "react";
 import { toast } from "sonner";
 import { BookCopy, Loader2 } from "lucide-react";
@@ -18,8 +18,9 @@ import {
  * @param {string} props.basePath   "/schemes/:schemeId/programmes/:programmeId"
  * @param {string} props.fileStem   e.g. "BE-CSE_2025"
  * @param {number[]} props.semesters
+ * @param {string} [props.wholeLabel] the first item (default "Whole programme")
  */
-export function SyllabusBookMenu({ basePath, fileStem, semesters }) {
+export function SyllabusBookMenu({ basePath, fileStem, semesters, wholeLabel = "Whole programme" }) {
   const [busy, setBusy] = useState(false);
   const download = async (semester) => {
     setBusy(true);
@@ -45,7 +46,7 @@ export function SyllabusBookMenu({ basePath, fileStem, semesters }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Approved syllabi as one PDF</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => download(null)}>Whole programme</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => download(null)}>{wholeLabel}</DropdownMenuItem>
         <DropdownMenuSeparator />
         {semesters.map((s) => (
           <DropdownMenuItem key={s} onSelect={() => download(s)}>

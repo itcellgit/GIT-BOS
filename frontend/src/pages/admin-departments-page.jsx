@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { useApiQuery } from "@/hooks/use-api";
 import { saveDepartment, saveProgramme } from "@/lib/actions";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
+import { InstitutionCard } from "@/components/forms/institution-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,7 @@ function Departments({ departments }) {
           />
         }
       />
+      <InstitutionCard />
       <div className="grid gap-4 lg:grid-cols-2">
         {departments.map((d) => (
           <Card key={d.id} className={d.isActive ? undefined : "opacity-60"}>

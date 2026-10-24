@@ -9,6 +9,7 @@ import {
   categorySchema,
   creditPatternSchema,
   formatConfigSchema,
+  formatSectionsSchema,
   outcomeItemSchema,
   schemeSchema,
   textBlockSchema,
@@ -16,9 +17,11 @@ import {
 import { assertPermission } from "../auth/session.js";
 import { NotFoundError, UserError } from "../errors.js";
 import { handle } from "../http/handler.js";
+import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
 import { recheckAmendment, recordAmendment } from "../services/amendments.js";
 import { writeAudit } from "../services/audit.js";
+import { buildSyllabusBook } from "../services/book.js";
 import {
   assertSchemeEditable,
   cloneLayer1,
@@ -53,7 +56,7 @@ schemesRouter.get(
     const scheme = await getSchemeConfig(req.params.id);
     if (!scheme) throw new NotFoundError("Scheme not found.");
     const canConfigure = can(user, "scheme.configure");
-    const [programmes, amendments] = await Promise.all([
+    const [programmes, amendments, semesterRows] = await Promise.all([
       listSchemeProgrammes(scheme.id, user),
       db.schemeAmendment.findMany({
         where: { schemeId: scheme.id },
@@ -64,10 +67,17 @@ schemesRouter.get(
           _count: { select: { flags: { where: { resolvedAt: null } } } },
         },
       }),
+      db.schemeCourse.findMany({
+        where: { schemeId: scheme.id },
+        distinct: ["semester"],
+        select: { semester: true },
+        orderBy: { semester: "asc" },
+      }),
     ]);
     return {
       scheme,
       programmes,
+      semesters: semesterRows.map((r) => r.semester),
       // Layer-1 changes made after publishing, newest first (README §5).
       amendments: amendments.map((a) => ({
         id: a.id,
@@ -81,6 +91,20 @@ schemesRouter.get(
       canConfigure,
       editable: canConfigure && scheme.status !== "RETIRED",
     };
+  }),
+);
+
+/**
+ * Whole-scheme syllabus book (README §8): every programme's scheme tables and contents, then each approved
+ * syllabus once (a course shared by programmes is not repeated). `?semester=3` for one semester.
+ */
+schemesRouter.get(
+  "/:id/book/pdf",
+  pdfRoute(async (req) => {
+    assertPermission(req, "scheme.configure");
+    const semester = req.query.semester ? Number(req.query.semester) : null;
+    if (semester !== null && !Number.isInteger(semester)) throw new UserError("Unknown semester.");
+    return buildSyllabusBook({ schemeId: req.params.id, programmeId: null, semester });
   }),
 );
 
@@ -373,6 +397,27 @@ schemesRouter.put(
       );
     },
     "Format settings saved",
+  ),
+);
+
+/** Section order, the optional sections on or off, and printed headings (README §5, §8). */
+schemesRouter.put(
+  "/:id/formats/:formatId/sections",
+  handle(
+    formatSectionsSchema,
+    async ({ sections }, req) => {
+      const formatId = req.params.formatId;
+      const format = owned(await db.formatConfig.findUnique({ where: { id: formatId } }), req.params.id);
+      await layer1Change(
+        req,
+        "format.sections",
+        "FormatConfig",
+        { sections },
+        (tx) => tx.formatConfig.update({ where: { id: formatId }, data: { sections } }),
+        { format: format.format },
+      );
+    },
+    "Section layout saved",
   ),
 );
 

@@ -162,7 +162,7 @@ test("people who are not Super Admins cannot reset a password by email", async (
   await submitPassword(page, "faculty.cse@example.edu", "Faculty-pass-2026");
   await expect(page.getByRole("alert")).toHaveText("The email or password is incorrect.");
 });
-test("a Super Admin resets a user's password to the default; the user signs in with it", async ({ page, browser }) => {
+test("a Super Admin resets a user's password to the default; the user must replace it", async ({ page, browser }) => {
   await submitPassword(page, EMAIL, RESET);
   await expect(page.getByRole("heading", { name: /Welcome/ })).toBeVisible();
   await page.goto("/admin/users?users.q=hod.cse@example.edu");
@@ -174,9 +174,13 @@ test("a Super Admin resets a user's password to the default; the user signs in w
   await searchTable(page, EMAIL);
   const ownRow = page.getByRole("row").filter({ hasText: EMAIL });
   await expect(ownRow.getByRole("button", { name: "Reset to default" })).toHaveCount(0);
-  // The user signs in with the default password and is not forced to change it.
+  // The user signs in with the default password and must replace it before doing anything else
+  // (README D18, revised 24 Oct 2026: the default is shared knowledge).
   const other = await (await browser.newContext()).newPage();
   await submitPassword(other, "hod.cse@example.edu", "Password@123");
+  await expect(other).toHaveURL(/\/account$/);
+  await expect(other.getByText("Choose your own password to continue")).toBeVisible();
+  await changePassword(other, "Password@123", "Hod-own-pass-2026");
   await expect(other.getByRole("heading", { name: /Welcome/ })).toBeVisible();
 });
 test("an ordinary Administrator cannot create or change Super Admins", async ({ page }) => {

@@ -18,6 +18,7 @@ import { SchemesPage } from "@/pages/schemes-page";
 import { SyllabusPage } from "@/pages/syllabus-page";
 import { SyllabusPreviewPage } from "@/pages/syllabus-preview-page";
 import { SyllabusReviewPage } from "@/pages/syllabus-review-page";
+import { VerifyPage } from "@/pages/verify-page";
 
 export function App() {
   return (
@@ -25,6 +26,8 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       {/* Public: an expert opens it from their review link (no sign-in). */}
       <Route path="/expert/:token" element={<ExpertReviewPage />} />
+      {/* Public: anyone holding an approved PDF checks it from its QR code. */}
+      <Route path="/verify/:documentId" element={<VerifyPage />} />
 
       {/* Reachable while a password change is required. */}
       <Route element={<RequireAuth allowPasswordChange />}>

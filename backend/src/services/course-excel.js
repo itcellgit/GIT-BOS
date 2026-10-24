@@ -97,7 +97,53 @@ function cellValue(v) {
  * if any row has a problem nothing is saved, and every problem is reported with its row number.
  * Rows whose course code is already in the list update that row; others are added.
  */
+/** Unpacked size limit of an uploaded workbook; a real course list is far below 1 MB. */
+export const MAX_UNPACKED_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Total uncompressed size declared in a zip's central directory (an .xlsx is a zip), or null when it cannot be
+ * read. Checked before unpacking, so a tiny "zip bomb" upload cannot fill the server's memory.
+ */
+export function zipUncompressedSize(buf) {
+  // End-of-central-directory record: signature 0x06054b50, at most 65,535 bytes of comment from the end.
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return null;
+  const entries = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  let total = 0;
+  for (let n = 0; n < entries; n++) {
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) return null;
+    const size = buf.readUInt32LE(p + 24);
+    if (size === 0xffffffff) return Infinity; // ZIP64: larger than 4 GB
+    total += size;
+    p += 46 + buf.readUInt16LE(p + 28) + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+  }
+  return total;
+}
+
 export async function importCourseWorkbook(list, file) {
+  const unpacked = zipUncompressedSize(file);
+  if (unpacked === null || unpacked > MAX_UNPACKED_BYTES) {
+    return {
+      errors: [
+        {
+          row: 0,
+          code: "",
+          message:
+            unpacked === null
+              ? "The file could not be read. Upload an .xlsx file downloaded from this page."
+              : "The workbook is far larger than a course list. Upload the .xlsx file downloaded from this page.",
+        },
+      ],
+      imported: 0,
+    };
+  }
   const wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(file);

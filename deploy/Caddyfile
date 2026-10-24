@@ -1,4 +1,6 @@
 # Caddy obtains and renews the HTTPS certificate for $DOMAIN automatically.
+# Access logs are deliberately off: expert review links carry their credential in the URL (/expert/<token>).
+# If a `log` directive is ever added, exclude /expert/* and /api/expert/* from it (README §11).
 {$DOMAIN} {
 	encode zstd gzip
 	reverse_proxy app:4000

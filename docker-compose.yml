@@ -20,8 +20,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-acp}
       POSTGRES_USER: ${POSTGRES_USER:-acp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # The app's own least-privilege login, created on first start by deploy/db-init (README §11).
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./deploy/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -35,7 +38,9 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-acp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-acp}
+      # The app runs as acp_app (no schema changes, append-only audit log); migrations run as the owner.
+      DATABASE_URL: postgresql://acp_app:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB:-acp}
+      MIGRATE_DATABASE_URL: postgresql://${POSTGRES_USER:-acp}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-acp}
       GOTENBERG_URL: http://gotenberg:3000
     depends_on:
       db: { condition: service_healthy }

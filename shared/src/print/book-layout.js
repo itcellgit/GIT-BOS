@@ -18,6 +18,8 @@ export const bookLinkPrefix = "https://book.invalid/contents/";
  * @param {{ name: string, framework?: string, effectiveFrom?: string }} doc.scheme
  * @param {{ code: string, name: string, department: string }} doc.programme
  * @param {{ semester: number, courses: BookCourse[] }[]} doc.semesters
+ * @param {{ programme: object, semesters: object[] }[]} [doc.parts] whole-scheme book: one part per programme
+ *   (replaces doc.programme and doc.semesters; a course shared by programmes keeps one contents entry)
  *   BookCourse = { code, title, category, credits: "L:T:P", lHours, tHours, pHours, twSlHours, cieMarks, seeMarks,
  *                  group?: string (elective basket), entry: number|null (contents number), page: number|null,
  *                  note?: string (why it is not in the book) }
@@ -33,18 +35,21 @@ export function renderBookFrontMatter(doc) {
     month: "long",
     year: "numeric",
   });
-  const semesterText =
-    doc.semesters.length === 1
-      ? `Semester ${doc.semesters[0].semester}`
-      : `Semesters ${doc.semesters.map((s) => s.semester).join(", ")}`;
-  const running = `${doc.programme.code} · ${doc.scheme.name} · Syllabus book`;
+  // A whole-scheme book has one part per programme; a programme book is a single part.
+  const parts = doc.parts ?? [{ programme: doc.programme, semesters: doc.semesters }];
+  const several = parts.length > 1;
+  const programmeName = several ? "All programmes" : parts[0].programme.name;
+  const semesters = [...new Set(parts.flatMap((p) => p.semesters.map((s) => s.semester)))].sort((a, b) => a - b);
+  const semesterText = semesters.length === 1 ? `Semester ${semesters[0]}` : `Semesters ${semesters.join(", ")}`;
+  const runningCode = several ? "All programmes" : parts[0].programme.code;
+  const running = `${runningCode} · ${doc.scheme.name} · Syllabus book`;
   const footerLeft = `${doc.institution.shortName || doc.institution.name} · Compiled ${generated}`;
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(`${doc.programme.code} ${doc.scheme.name} – Syllabus book`)}</title>
+<title>${esc(`${runningCode} ${doc.scheme.name} – Syllabus book`)}</title>
 <style>
 ${fontFaces(fontUrl)}
 @page {
@@ -61,6 +66,7 @@ ${fontFaces(fontUrl)}
 }
 ${baseCss}
 .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; text-align: center; break-after: page; }
+.cover .logo { height: 30mm; width: auto; margin-bottom: 10pt; }
 .cover .name { font-size: 20pt; font-weight: 700; }
 .cover .address { font-size: 11pt; margin-top: 4pt; }
 .cover .book { font-size: 26pt; font-weight: 700; margin-top: 60pt; letter-spacing: 1pt; }
@@ -76,6 +82,9 @@ h1 { font-size: 14pt; text-align: center; margin: 0 0 10pt; }
 .contents { width: 100%; border-collapse: collapse; }
 .contents td { padding: 3pt 0; vertical-align: bottom; font-size: 10.5pt; }
 .contents .sem td { font-weight: 700; padding-top: 10pt; }
+.contents .part td { font-size: 12pt; font-weight: 700; padding-top: 16pt; border-bottom: 1pt solid #000; }
+h2.part { font-size: 13pt; margin: 16pt 0 6pt; border-bottom: 1pt solid #000; }
+h2.part:not(:first-of-type) { break-before: page; }
 .contents a { color: #000; text-decoration: none; }
 .contents .entry { display: flex; align-items: baseline; gap: 4pt; }
 .contents .dots { flex: 1; border-bottom: 1pt dotted #777; transform: translateY(-3pt); }
@@ -86,10 +95,11 @@ h1 { font-size: 14pt; text-align: center; margin: 0 0 10pt; }
 <body>
 <div class="sheet">
 <div class="cover">
+  ${doc.institution.logoUrl ? `<div><img class="logo" src="${esc(doc.institution.logoUrl)}" alt=""></div>` : ""}
   <div class="name">${esc(doc.institution.name)}</div>
   ${doc.institution.address ? `<div class="address">${esc(doc.institution.address)}</div>` : ""}
   <div class="book">SYLLABUS BOOK</div>
-  <div class="programme">${esc(doc.programme.name)}</div>
+  <div class="programme">${esc(programmeName)}</div>
   <div class="programme">${esc(semesterText)}</div>
   <div class="scheme">${esc(doc.scheme.name)}${doc.scheme.effectiveFrom ? ` · Effective from ${esc(doc.scheme.effectiveFrom)}` : ""}</div>
   ${doc.scheme.framework ? `<div class="framework">${esc(doc.scheme.framework)}</div>` : ""}
@@ -97,12 +107,24 @@ h1 { font-size: 14pt; text-align: center; margin: 0 0 10pt; }
 </div>
 
 <h1>Scheme of Teaching and Examination</h1>
-${doc.semesters.map(schemeTable).join("\n")}
+${parts
+  .map(
+    (p) =>
+      (several ? `<h2 class="part">${esc(`${p.programme.code} – ${p.programme.name}`)}</h2>\n` : "") +
+      p.semesters.map(schemeTable).join("\n"),
+  )
+  .join("\n")}
 
 <div class="section">
 <h1>Contents</h1>
 <table class="contents">
-${doc.semesters.map(contentsRows).join("\n")}
+${parts
+  .map(
+    (p) =>
+      (several ? `<tr class="part"><td>${esc(`${p.programme.code} – ${p.programme.name}`)}</td></tr>\n` : "") +
+      p.semesters.map(contentsRows).join("\n"),
+  )
+  .join("\n")}
 </table>
 </div>
 </div>

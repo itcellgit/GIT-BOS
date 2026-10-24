@@ -86,7 +86,11 @@ approvedSyllabiRouter.get(
     return {
       pdf: Buffer.from(doc.pdf),
       fileName: `${syllabus.course.code}_syllabus_${version.label}.pdf`,
-      headers: { "X-Document-SHA256": doc.sha256, "X-Layout-Version": String(doc.layoutVersion) },
+      headers: {
+        "X-Document-Id": doc.id,
+        "X-Document-SHA256": doc.sha256,
+        "X-Layout-Version": String(doc.layoutVersion),
+      },
     };
   }),
 );

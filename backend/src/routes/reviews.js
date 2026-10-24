@@ -32,7 +32,8 @@ import { pdfRoute } from "../http/pdf.js";
 import { db } from "../infra/db.js";
 import { resolveRevisionFlags } from "../services/amendments.js";
 import { writeAudit } from "../services/audit.js";
-import { frozenSyllabusPdf, isApprovedVersion } from "../services/documents.js";
+import { frozenSyllabusPdf, isApprovedVersion, printDataOf } from "../services/documents.js";
+import { logoDataUrl } from "../services/institution.js";
 import { expertLinkUrl, linkStatus, newToken } from "../services/expert-links.js";
 import { notifyWorkflow } from "../services/notifications.js";
 import { sendMail } from "../infra/mail.js";
@@ -376,6 +377,14 @@ function freezeAfterApproval(ctx, versionId) {
   });
 }
 
+async function approvalPrintData(data) {
+  const printData = printDataOf(data);
+  if (printData.institution?.logoUrl) {
+    printData.institution = { ...printData.institution, logoUrl: await logoDataUrl() };
+  }
+  return printData;
+}
+
 async function recordApproval(tx, ctx, versionId, { approvedOn, reference }) {
   await tx.syllabusApproval.create({
     data: {
@@ -383,6 +392,9 @@ async function recordApproval(tx, ctx, versionId, { approvedOn, reference }) {
       versionId,
       approvedOn: new Date(`${approvedOn}T00:00:00Z`),
       reference,
+      // Frozen PDFs print from this snapshot, even when made after the layout or standard text changed.
+      // The logo goes in as the image itself, so a later new logo does not change what was approved.
+      printData: await approvalPrintData(ctx.data),
       recordedById: ctx.user.id,
     },
   });
@@ -588,7 +600,11 @@ reviewsRouter.get(
       return {
         pdf: Buffer.from(doc.pdf),
         fileName,
-        headers: { "X-Document-SHA256": doc.sha256, "X-Layout-Version": String(doc.layoutVersion) },
+        headers: {
+          "X-Document-Id": doc.id,
+          "X-Document-SHA256": doc.sha256,
+          "X-Layout-Version": String(doc.layoutVersion),
+        },
       };
     }
     return {

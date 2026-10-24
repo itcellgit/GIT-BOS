@@ -12,6 +12,8 @@ export default defineConfig({
     seed: "node prisma/seed.js",
   },
   datasource: {
-    url: process.env.DATABASE_URL,
+    // Migrations need the owner role; in production the app itself connects as a least-privilege role
+    // (docker-compose.yml), so the CLI prefers MIGRATE_DATABASE_URL when it is set.
+    url: process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL,
   },
 });

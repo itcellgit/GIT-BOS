@@ -7,6 +7,9 @@ const save = (base, id, values) => (id ? api.put(`${base}/${id}`, values) : api.
 
 // --- Administration ---------------------------------------------------------------
 export const saveDepartment = (id, values) => save("/admin/departments", id, values);
+export const saveInstitution = (values) => api.put("/admin/institution", values);
+export const uploadInstitutionLogo = (formData) => api.post("/admin/institution/logo", formData);
+export const removeInstitutionLogo = () => api.delete("/admin/institution/logo");
 export const saveProgramme = (id, values) => save("/admin/programmes", id, values);
 export const saveUser = (id, values) => save("/admin/users", id, values);
 export const addRole = (userId, values) => api.post(`/admin/users/${userId}/roles`, values);
@@ -29,6 +32,8 @@ export const addCreditPattern = (schemeId, categoryId, values) =>
 export const deleteCreditPattern = (schemeId, patternId) => api.delete(`/schemes/${schemeId}/patterns/${patternId}`);
 export const saveFormatConfig = (schemeId, formatId, values) =>
   api.put(`/schemes/${schemeId}/formats/${formatId}`, values);
+export const saveFormatSections = (schemeId, formatId, values) =>
+  api.put(`/schemes/${schemeId}/formats/${formatId}/sections`, values);
 export const saveOutcomeItem = (schemeId, itemId, values) => save(`/schemes/${schemeId}/outcomes`, itemId, values);
 export const deleteOutcomeItem = (schemeId, itemId) => api.delete(`/schemes/${schemeId}/outcomes/${itemId}`);
 export const saveBloomLevel = (schemeId, levelId, values) => api.put(`/schemes/${schemeId}/bloom/${levelId}`, values);

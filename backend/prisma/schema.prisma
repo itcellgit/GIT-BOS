@@ -139,6 +139,9 @@ model InstitutionSettings {
   address   String?
   estd      String?
   logoPath  String?
+  /// Logo printed on syllabi, Action Taken reports and the syllabus book (PNG or JPEG, ≤ 200 KB; README §5).
+  logo      Bytes?
+  logoType  String?
   updatedAt DateTime @updatedAt
 
   @@map("institution_settings")
@@ -645,6 +648,9 @@ model SyllabusApproval {
   version      SyllabusVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
   approvedOn   DateTime        @db.Date
   reference    String
+  /// Everything printed around the content (institution, standard text, outcome lists, format, faculty) as it
+  /// was at approval, so the frozen PDF matches what was approved even if it is made later (README §8).
+  printData    Json?
   recordedById String?
   recordedBy   User?           @relation(fields: [recordedById], references: [id], onDelete: SetNull)
   createdAt    DateTime        @default(now())

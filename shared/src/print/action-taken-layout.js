@@ -90,6 +90,7 @@ ${fontFaces(fontUrl)}
 ${baseCss}
 .institution { text-align: center; margin-bottom: 6pt; }
 .institution .name { font-weight: 700; font-size: 13pt; }
+.institution .logo { height: 15mm; width: auto; margin-bottom: 3pt; }
 .institution .address { font-size: 9.5pt; }
 .report-title { text-align: center; font-weight: 700; font-size: 12pt; margin: 6pt 0 8pt; }
 .ref { font-size: 8.5pt; color: #444; margin-bottom: 2pt; }
@@ -101,6 +102,7 @@ ${baseCss}
 <body>
 <div class="sheet">
 <div class="institution">
+  ${doc.institution.logoUrl ? `<img class="logo" src="${esc(doc.institution.logoUrl)}" alt="">` : ""}
   <div class="name">${esc(doc.institution.name)}</div>
   ${doc.institution.address ? `<div class="address">${esc(doc.institution.address)}</div>` : ""}
 </div>

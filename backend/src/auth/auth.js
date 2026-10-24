@@ -23,13 +23,26 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     disableSignUp: true,
   };
 }
+// Microsoft sign-in is limited to the institute's own Microsoft Entra tenant (its directory id, a GUID).
+// The multi-tenant values ("common", "organizations", "consumers") would let accounts from any Microsoft
+// directory in, and a foreign directory can claim any email address (the "nOAuth" pattern), so they are refused.
+const TENANT_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const microsoftTenantProblem = (tenantId) =>
+  TENANT_GUID.test(tenantId ?? "")
+    ? null
+    : "MICROSOFT_TENANT_ID must be the institute's Microsoft Entra tenant id (a GUID); Microsoft sign-in is off.";
 if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
-  socialProviders.microsoft = {
-    clientId: process.env.MICROSOFT_CLIENT_ID,
-    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    tenantId: process.env.MICROSOFT_TENANT_ID || "common",
-    disableSignUp: true,
-  };
+  const problem = microsoftTenantProblem(process.env.MICROSOFT_TENANT_ID);
+  if (problem) {
+    console.warn(`[auth] ${problem}`);
+  } else {
+    socialProviders.microsoft = {
+      clientId: process.env.MICROSOFT_CLIENT_ID,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+      tenantId: process.env.MICROSOFT_TENANT_ID,
+      disableSignUp: true,
+    };
+  }
 }
 export const enabledSocialProviders = Object.keys(socialProviders);
 /** The Google Workspace domain allowed to sign in, or null when Google sign-in is not configured. */
@@ -86,11 +99,15 @@ export const auth = betterAuth({
     }),
   },
   account: {
-    accountLinking: { enabled: true, trustedProviders: ["google", "microsoft"] },
+    // Google is trusted to link to an existing account by email: its `hd` claim is checked and Workspace
+    // emails are verified. Microsoft is not: it links only when Microsoft reports the email as verified.
+    accountLinking: { enabled: true, trustedProviders: ["google"] },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // refresh daily
+    // Staff often use shared lab and office computers: a session ends after 2 days without use; while in use
+    // it is extended every 12 hours, so active people are not signed out mid-work.
+    expiresIn: 60 * 60 * 24 * 2,
+    updateAge: 60 * 60 * 12,
   },
   // Limits repeated attempts per IP address. Active in production; off in development so tests can sign in freely.
   rateLimit: {

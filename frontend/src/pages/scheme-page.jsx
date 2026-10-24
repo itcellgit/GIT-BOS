@@ -4,6 +4,7 @@ import { useApiQuery } from "@/hooks/use-api";
 import { deleteDraftScheme, publishScheme, retireScheme, updateScheme } from "@/lib/actions";
 import { ConfirmActionButton } from "@/components/forms/confirm-action-button";
 import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
+import { SyllabusBookMenu } from "@/components/forms/syllabus-book-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { QueryState } from "@/components/layout/query-state";
 import { AmendmentsSection } from "@/components/schemes/amendments-section";
@@ -39,7 +40,7 @@ export function SchemePage() {
 
   return (
     <QueryState query={query}>
-      {({ scheme, programmes, amendments, canConfigure, editable }) => (
+      {({ scheme, programmes, semesters, amendments, canConfigure, editable }) => (
         <>
           <PageHeader
             back={{ href: "/schemes", label: "All schemes" }}
@@ -70,6 +71,14 @@ export function SchemePage() {
                 )}
                 {canConfigure && (
                   <>
+                    {scheme.status !== "DRAFT" && semesters.length > 0 && (
+                      <SyllabusBookMenu
+                        basePath={`/schemes/${scheme.id}`}
+                        fileStem={`${scheme.code}_all_programmes`}
+                        semesters={semesters}
+                        wholeLabel="All programmes, all semesters"
+                      />
+                    )}
                     {editable && (
                       <EntityFormDialog
                         schema="scheme"

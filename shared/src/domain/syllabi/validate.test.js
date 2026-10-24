@@ -53,6 +53,14 @@ describe("Theory syllabus validation (README §9)", () => {
     expect(validateSyllabus(completeContent(), ctx)).toEqual([]);
   });
 
+  it("skips the flipped classroom checks when the format turns that section off", () => {
+    const c = completeContent();
+    c.flippedSessions = [0, 0, 99, 0, 0]; // none planned, and one unit over its hours
+    const off = { ...ctx, format: { ...format, sections: [{ id: "flipped", enabled: false }] } };
+    expect(validateSyllabus(c, off).filter((i) => i.section === "flipped")).toEqual([]);
+    expect(validateSyllabus(c, ctx).filter((i) => i.section === "flipped")).not.toEqual([]);
+  });
+
   it("warns about units no CO covers and COs without units (coverage)", () => {
     const c = completeContent();
     c.outcomes[3].units = [4];

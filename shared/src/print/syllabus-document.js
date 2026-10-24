@@ -10,7 +10,7 @@ export const printFontUrl = (file) => `/api/print/fonts/${file}`;
  * @param {object} data     editor data from the API
  * @param {object} content  the content to print: the working copy, or a version's content
  * @param {{ fontUrl?: (file: string) => string, generatedAt?: Date,
- *           status?: { label: string, draft: boolean } }} [options]
+ *           status?: { label: string, draft: boolean }, verification?: { url: string, qrUrl: string } }} [options]
  *   status: what the running header says. Defaults to the working copy's state (with a DRAFT
  *   watermark); a version passes its own label, e.g. "V2.1 – Industry Experts & Alumni review".
  */
@@ -32,5 +32,6 @@ export function syllabusHtml(data, content, options = {}) {
     },
     fontUrl: options.fontUrl ?? printFontUrl,
     generatedAt: options.generatedAt,
+    verification: options.verification,
   });
 }

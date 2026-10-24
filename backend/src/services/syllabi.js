@@ -1,11 +1,12 @@
 // Loading a syllabus with everything around it: the scheme rows, the format, the people assigned,
 // permissions, and its place in the review workflow. Used by the editor routes and the review routes.
-import { can } from "@acp/shared/domain/auth/permissions";
+import { can, hasRole } from "@acp/shared/domain/auth/permissions";
 import { pendingInputs, versionLabel, workflowBlocker } from "@acp/shared/domain/reviews/workflow";
 import { emptySyllabusContent, normalizeSyllabusContent } from "@acp/shared/domain/syllabi/content";
 import { summarizeIssues, validateSyllabus, validationContext } from "@acp/shared/domain/syllabi/validate";
 import { assertSignedIn } from "../auth/session.js";
 import { carryForwardSources } from "./carry-forward.js";
+import { logoPath } from "./institution.js";
 import { NotFoundError, PermissionError } from "../errors.js";
 import { db } from "../infra/db.js";
 
@@ -54,7 +55,10 @@ export async function loadSyllabusContext(user, schemeId, courseId) {
 
   const resource = {
     departmentId: course.owningDepartmentId,
-    isAssigned: !!user && assignments.some((a) => a.userId === user.id),
+    // An assignment gives rights only while the person is still Faculty of the owning department: removing the
+    // role (or moving department) ends their access without having to remove each assignment.
+    isAssigned:
+      !!user && assignments.some((a) => a.userId === user.id) && hasRole(user, "FACULTY", course.owningDepartmentId),
   };
   if (user && !can(user, "syllabus.view", resource)) throw new PermissionError();
 
@@ -170,7 +174,11 @@ export async function buildEditorData(ctx) {
   const { user, scheme, course, rows, assignments, syllabus, format, resource, lockedReason } = ctx;
   const canEdit = !lockedReason && can(user, "syllabus.edit", resource);
   const [institution, outcomes, bloomLevels, textBlocks, revisionFlags, carrySources] = await Promise.all([
-    db.institutionSettings.findUnique({ where: { id: 1 } }),
+    // Not the logo's bytes: its URL is enough for the pages (PDF jobs inline it, services/pdf.js).
+    db.institutionSettings.findUnique({
+      where: { id: 1 },
+      select: { name: true, shortName: true, address: true, logoType: true, updatedAt: true },
+    }),
     db.outcomeItem.findMany({
       where: {
         schemeId: scheme.id,
@@ -196,6 +204,7 @@ export async function buildEditorData(ctx) {
       name: institution?.name ?? "",
       shortName: institution?.shortName ?? null,
       address: institution?.address ?? null,
+      logoUrl: institution?.logoType ? logoPath(institution.updatedAt.getTime()) : null,
     },
     scheme: {
       id: scheme.id,

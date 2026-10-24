@@ -106,12 +106,47 @@ describe("Theory print layout", () => {
     expect(html).not.toContain("CIE (3rd year)");
   });
 
+  it("prints the institution header, with the logo only when there is one (README §5)", () => {
+    const institution = { name: "KLS Gogte Institute of Technology", address: "Udyambag, Belagavi" };
+    const without = renderSyllabusLayout(doc(emptySyllabusContent(format), { institution }));
+    expect(without).toContain(`<div class="institution-name">KLS Gogte Institute of Technology</div>`);
+    expect(without).toContain("Udyambag, Belagavi");
+    expect(without).not.toContain(`class="logo"`);
+    const withLogo = renderSyllabusLayout(
+      doc(emptySyllabusContent(format), { institution: { ...institution, logoUrl: `/api/print/logo?v=1"x` } }),
+    );
+    expect(withLogo).toContain(`<img class="logo" src="/api/print/logo?v=1&quot;x" alt="">`);
+  });
+
+  it("prints sections in the format's order, without those turned off, under the Dean's headings", () => {
+    const sections = [
+      { id: "outcomes", label: "Course Outcomes" },
+      { id: "objectives" },
+      { id: "prerequisites" },
+      { id: "units" },
+      { id: "flipped", enabled: false },
+    ];
+    const html = renderSyllabusLayout(doc(emptySyllabusContent(format), { format: { ...format, sections } }));
+    expect(html).not.toContain("Flipped Classroom Details");
+    expect(html).toContain(`class="band">Course Outcomes<div class="legend">`);
+    expect(html.indexOf("Course Outcomes")).toBeLessThan(html.indexOf("Course learning objectives"));
+  });
+
   it("has no watermark once approved", () => {
     const html = renderSyllabusLayout(
       doc(emptySyllabusContent(format), { status: { label: "V4.0 – Approved", draft: false } }),
     );
     expect(html).not.toContain(`class="watermark"`);
     expect(html).toContain(`content: "V4.0 – Approved"`);
+  });
+
+  it("prints the verification QR code and link only on approved PDFs (README §8)", () => {
+    const verification = { url: "https://acp.example.edu/verify/abc", qrUrl: "data:image/svg+xml;base64,PHN2Zz4=" };
+    const html = renderSyllabusLayout(doc(emptySyllabusContent(format), { verification }));
+    expect(html).toContain('class="verification"');
+    expect(html).toContain("https://acp.example.edu/verify/abc");
+    expect(html).toContain('src="data:image/svg+xml;base64,PHN2Zz4="');
+    expect(renderSyllabusLayout(doc(emptySyllabusContent(format)))).not.toContain('class="verification"');
   });
 
   it("prints a Lab/AEC syllabus: experiments instead of units, no flipped classroom or reference books", () => {

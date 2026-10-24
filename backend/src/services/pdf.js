@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { printFontFiles } from "@acp/shared/print/syllabus-layout";
+import { inlineLogo } from "./institution.js";
 
 const require = createRequire(import.meta.url);
 const fontDir = join(dirname(require.resolve("@fontsource/carlito/package.json")), "files");
@@ -31,14 +32,37 @@ export async function embeddedFontUrl() {
 
 export class PdfUnavailableError extends Error {}
 
+// Headless Chromium needs a lot of memory per page (README §14), so only a few renders run at once; the rest
+// wait in a short queue, and beyond that the request is refused with "busy" instead of exhausting the server.
+const MAX_RENDERS = Number(process.env.PDF_CONCURRENCY) || 2;
+const MAX_WAITING = Number(process.env.PDF_QUEUE) || 20;
+let running = 0;
+const waiting = [];
+
+async function withRenderSlot(fn) {
+  if (running < MAX_RENDERS) running++;
+  else if (waiting.length >= MAX_WAITING) {
+    throw new PdfUnavailableError("The PDF service is busy. Please try again in a minute.");
+  } else {
+    await new Promise((resolve) => waiting.push(resolve)); // the finishing render hands its slot over
+  }
+  try {
+    return await fn();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else running--;
+  }
+}
+
 /** Renders a complete HTML document to a PDF Buffer. */
 export async function htmlToPdf(html) {
   const gotenberg = process.env.GOTENBERG_URL;
-  if (gotenberg) return viaGotenberg(gotenberg, html);
-  if (process.env.NODE_ENV === "production") {
+  if (!gotenberg && process.env.NODE_ENV === "production") {
     throw new PdfUnavailableError("PDF generation is not configured (GOTENBERG_URL).");
   }
-  return viaPlaywright(html);
+  html = await inlineLogo(html); // the renderer loads nothing from the network
+  return withRenderSlot(() => (gotenberg ? viaGotenberg(gotenberg, html) : viaPlaywright(html)));
 }
 
 async function viaGotenberg(baseUrl, html) {

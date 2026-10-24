@@ -36,7 +36,12 @@ meRouter.get(
     const user = assertSignedIn(req);
     const [assignments, schemes, departments] = await Promise.all([
       db.courseAssignment.findMany({
-        where: { userId: user.id, scheme: { status: { not: "RETIRED" } } },
+        where: {
+          userId: user.id,
+          scheme: { status: { not: "RETIRED" } },
+          // Only courses of departments where the person is still Faculty (they lose access otherwise).
+          course: { owningDepartmentId: { in: departmentsWithRole(user, ["FACULTY"]) } },
+        },
         include: {
           scheme: true,
           course: { include: { schemeCourses: { include: { programme: { select: { code: true } } } } } },

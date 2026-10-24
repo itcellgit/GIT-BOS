@@ -8,6 +8,7 @@ import { bookLinkPrefix, renderBookFrontMatter } from "@acp/shared/print/book-la
 import { NotFoundError, UserError } from "../errors.js";
 import { db } from "../infra/db.js";
 import { frozenSyllabusPdf } from "./documents.js";
+import { logoPath } from "./institution.js";
 import { embeddedFontUrl, htmlToPdf } from "./pdf.js";
 import { buildEditorData, loadSyllabusContext } from "./syllabi.js";
 
@@ -24,33 +25,43 @@ async function approvedPdf(schemeId, courseId, versionId) {
 }
 
 /**
- * Builds the book for one programme of a scheme, for one semester or (semester null) all of them.
+ * Builds the book for one programme of a scheme, or (programmeId null) for every programme of the scheme, for
+ * one semester or (semester null) all of them. In a whole-scheme book a course shared by programmes is printed
+ * once; each programme's contents link to that one copy.
  * @returns {Promise<{ pdf: Buffer, fileName: string, included: number, missing: number }>}
  */
-export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
+export async function buildSyllabusBook({ schemeId, programmeId = null, semester = null }) {
   const [scheme, programme, institution] = await Promise.all([
     db.scheme.findUnique({ where: { id: schemeId } }),
-    db.programme.findUnique({ where: { id: programmeId }, include: { department: true } }),
+    programmeId ? db.programme.findUnique({ where: { id: programmeId }, include: { department: true } }) : null,
     db.institutionSettings.findUnique({ where: { id: 1 } }),
   ]);
-  if (!scheme || !programme) throw new NotFoundError("Course list not found.");
+  if (!scheme || (programmeId && !programme)) throw new NotFoundError("Course list not found.");
   const rows = await db.schemeCourse.findMany({
-    where: { schemeId, programmeId, ...(semester ? { semester } : {}) },
-    orderBy: [{ semester: "asc" }, { sortOrder: "asc" }, { course: { code: "asc" } }],
-    include: { course: true, category: true, electiveGroup: true },
+    where: { schemeId, ...(programmeId ? { programmeId } : {}), ...(semester ? { semester } : {}) },
+    orderBy: [{ programme: { code: "asc" } }, { semester: "asc" }, { sortOrder: "asc" }, { course: { code: "asc" } }],
+    include: { course: true, category: true, electiveGroup: true, programme: { include: { department: true } } },
   });
   if (rows.length === 0) throw new UserError(semester ? `Semester ${semester} has no courses.` : "No courses yet.");
   const syllabi = await db.syllabus.findMany({
-    where: { schemeId, courseId: { in: rows.map((r) => r.courseId) } },
+    where: { schemeId, courseId: { in: [...new Set(rows.map((r) => r.courseId))] } },
     select: { courseId: true, status: true, officialVersionId: true, officialVersion: { select: { label: true } } },
   });
 
   // One entry per course, in scheme order; only courses with an approved version go into the book.
   const entries = [];
-  const semesters = [];
+  const entryOf = new Map(); // courseId → entry number (a shared course appears once)
+  const parts = [];
   for (const r of rows) {
-    let sem = semesters.at(-1);
-    if (sem?.semester !== r.semester) semesters.push((sem = { semester: r.semester, courses: [] }));
+    let part = parts.at(-1);
+    if (part?.programme.id !== r.programmeId) {
+      const p = r.programme;
+      parts.push(
+        (part = { programme: { id: p.id, code: p.code, name: p.name, department: p.department.code }, semesters: [] }),
+      );
+    }
+    let sem = part.semesters.at(-1);
+    if (sem?.semester !== r.semester) part.semesters.push((sem = { semester: r.semester, courses: [] }));
     const y = syllabi.find((s) => s.courseId === r.courseId);
     const course = {
       code: r.course.code,
@@ -69,9 +80,13 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
       note: !r.category.syllabusRequired ? "No syllabus required" : "Not yet approved",
     };
     if (r.category.syllabusRequired && y?.officialVersionId) {
-      const pdf = await PDFDocument.load(await approvedPdf(schemeId, r.courseId, y.officialVersionId));
-      course.entry = entries.length;
-      entries.push({ course, pdf, version: y.officialVersion.label });
+      if (!entryOf.has(r.courseId)) {
+        const pdf = await PDFDocument.load(await approvedPdf(schemeId, r.courseId, y.officialVersionId));
+        entryOf.set(r.courseId, entries.length);
+        entries.push({ courses: [], pdf, version: y.officialVersion.label });
+      }
+      course.entry = entryOf.get(r.courseId);
+      entries[course.entry].courses.push(course);
     }
     sem.courses.push(course);
   }
@@ -80,10 +95,14 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
   // The front matter goes first, so the page numbers in the contents depend on its length: render until stable.
   const fontUrl = await embeddedFontUrl();
   const doc = {
-    institution: { name: institution?.name ?? "", shortName: institution?.shortName, address: institution?.address },
+    institution: {
+      name: institution?.name ?? "",
+      shortName: institution?.shortName,
+      address: institution?.address,
+      logoUrl: institution?.logoType ? logoPath(institution.updatedAt.getTime()) : null,
+    },
     scheme,
-    programme: { code: programme.code, name: programme.name, department: programme.department.code },
-    semesters,
+    parts,
     fontUrl,
   };
   let front;
@@ -91,7 +110,7 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     let page = frontPages + 1;
     for (const e of entries) {
-      e.course.page = page;
+      for (const c of e.courses) c.page = page;
       page += e.pdf.getPageCount();
     }
     front = await PDFDocument.load(await htmlToPdf(renderBookFrontMatter(doc)));
@@ -100,7 +119,8 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
   }
 
   const book = await PDFDocument.create();
-  book.setTitle(`${programme.code} ${scheme.name} – Syllabus book`);
+  const name = programme ? programme.code : "All programmes";
+  book.setTitle(`${name} ${scheme.name} – Syllabus book`);
   book.setCreator("Academic Curriculum Portal");
   for (const p of await book.copyPages(front, front.getPageIndices())) book.addPage(p);
   for (const e of entries) {
@@ -109,11 +129,8 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
   }
 
   linkContents(book, frontPages, entries);
-  addOutline(book, [
-    { title: "Cover", pageIndex: 0 },
-    { title: "Scheme of Teaching and Examination", pageIndex: 1 },
-    { title: "Contents", pageIndex: contentsPageIndex(front) },
-    ...semesters
+  const semesterOutline = (semesters) =>
+    semesters
       .map((s) => ({
         title: `Semester ${s.semester}`,
         children: s.courses
@@ -121,16 +138,30 @@ export async function buildSyllabusBook({ schemeId, programmeId, semester }) {
           .map((c) => ({ title: `${c.code} – ${c.title}`, pageIndex: entries[c.entry].startIndex })),
       }))
       .filter((s) => s.children.length)
-      .map((s) => ({ ...s, pageIndex: s.children[0].pageIndex })),
+      .map((s) => ({ ...s, pageIndex: s.children[0].pageIndex }));
+  const courseOutline =
+    parts.length === 1
+      ? semesterOutline(parts[0].semesters)
+      : parts
+          .map((p) => ({ title: `${p.programme.code} – ${p.programme.name}`, children: semesterOutline(p.semesters) }))
+          .filter((p) => p.children.length)
+          .map((p) => ({ ...p, pageIndex: p.children[0].pageIndex }));
+  addOutline(book, [
+    { title: "Cover", pageIndex: 0 },
+    { title: "Scheme of Teaching and Examination", pageIndex: 1 },
+    { title: "Contents", pageIndex: contentsPageIndex(front) },
+    ...courseOutline,
   ]);
 
   const pdf = Buffer.from(await book.save());
-  const part = semester ? `sem${semester}` : "all";
+  const sem = semester ? `sem${semester}` : "all";
   return {
     pdf,
-    fileName: `${programme.code}_${scheme.code}_${part}_syllabus_book.pdf`,
+    fileName: programme
+      ? `${programme.code}_${scheme.code}_${sem}_syllabus_book.pdf`
+      : `${scheme.code}_all_programmes_${sem}_syllabus_book.pdf`,
     included: entries.length,
-    missing: rows.length - entries.length,
+    missing: new Set(rows.map((r) => r.courseId)).size - entries.length,
   };
 }
 

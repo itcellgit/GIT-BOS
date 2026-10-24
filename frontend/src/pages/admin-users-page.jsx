@@ -232,7 +232,7 @@ function Users({ users, departments, actorIsSuperAdmin, defaultPassword }) {
                               label="Reset to default"
                               icon={RotateCcwKey}
                               title={`Reset password — ${u.name}?`}
-                              description={`${u.name} is signed out everywhere and can then sign in with ${u.email} and the default password “${defaultPassword}” (Password option on the sign-in page). Their current password, if any, stops working.`}
+                              description={`${u.name} is signed out everywhere and can then sign in with ${u.email} and the default password “${defaultPassword}” (Password option on the sign-in page), and must then choose a new password. Their current password, if any, stops working.`}
                               confirmLabel="Reset password"
                             />
                           )}

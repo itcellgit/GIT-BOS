@@ -13,6 +13,7 @@
 // Each issue: { severity: "error" | "warning", section, message }. `section` is the editor's
 // section id (header, objectives, units…). Errors block submission; warnings are shown for review.
 import { romanNumeral, syllabusTotals } from "./content.js";
+import { sectionEnabled } from "./sections.js";
 
 const filled = (s) => typeof s === "string" && s.trim() !== "";
 const isBlankRow = (row, keys) => keys.every((k) => (typeof row[k] === "string" ? !filled(row[k]) : row[k] == null));
@@ -80,8 +81,10 @@ export function validateSyllabus(content, ctx) {
     error("units", `Unit hours add up to ${totals.unitHours}; the scheme has ${offering.lHours} lecture hours.`);
   }
 
-  // --- Flipped classroom ------------------------------------------------------------------------------
+  // --- Flipped classroom (unless Dean Academics turned the section off for the format) -----------------
+  const flippedOn = sectionEnabled(format, "flipped");
   content.flippedSessions.forEach((n, i) => {
+    if (!flippedOn) return;
     const unitHours = content.units[i]?.hours;
     if (n != null && unitHours != null && n > unitHours) {
       error(
@@ -90,7 +93,8 @@ export function validateSyllabus(content, ctx) {
       );
     }
   });
-  if (hasUnits && totals.flippedSessions === 0) warning("flipped", "No flipped classroom sessions are planned.");
+  if (flippedOn && hasUnits && totals.flippedSessions === 0)
+    warning("flipped", "No flipped classroom sessions are planned.");
 
   // --- Experiments (Integrated, Integrated-Project, Lab/AEC) ---------------------------------------------
   const regular = format.experimentCount ?? 0;

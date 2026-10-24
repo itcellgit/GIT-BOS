@@ -3,6 +3,7 @@ import { EntityFormDialog } from "@/components/forms/entity-form-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { saveFormatConfig } from "@/lib/actions";
+import { SectionLayoutDialog } from "@/components/schemes/section-layout-dialog";
 import { Pencil } from "lucide-react";
 const fields = [
   { name: "title", label: "Heading printed on the syllabus", type: "text" },
@@ -20,8 +21,8 @@ export function FormatsSection({ scheme, editable }) {
   return (
     <div className="space-y-4">
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Settings for each syllabus format. The printed layout follows the institution&apos;s 2025 templates; section
-        order and headings become configurable with the print layouts in Phase 1.
+        Settings for each syllabus format. The printed layout follows the institution&apos;s 2025 templates; use
+        Sections to change the order of the sections, turn optional ones off, or rename headings.
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
         {scheme.formats.map((f) => (
@@ -29,8 +30,9 @@ export function FormatsSection({ scheme, editable }) {
             <CardHeader>
               <CardTitle>{formatLabels[f.format]}</CardTitle>
               <CardDescription>{f.title}</CardDescription>
-              {editable && (
-                <CardAction>
+              <CardAction className="flex gap-2">
+                <SectionLayoutDialog schemeId={scheme.id} format={f} editable={editable} />
+                {editable && (
                   <EntityFormDialog
                     schema="formatConfig"
                     title={`${formatLabels[f.format]} format`}
@@ -55,8 +57,8 @@ export function FormatsSection({ scheme, editable }) {
                       </Button>
                     }
                   />
-                </CardAction>
-              )}
+                )}
+              </CardAction>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">

@@ -83,9 +83,18 @@ export async function upsertSchemeCourse(tx, scheme, programmeId, input, schemeC
       throw new UserError("Unknown elective group.", { electiveGroupId: "Choose a group from this programme" });
     }
   }
-  let course = await tx.course.findUnique({ where: { code: input.code } });
+  let course = await tx.course.findUnique({ where: { code: input.code }, include: { owningDepartment: true } });
   if (course) {
     if (course.title !== input.title) {
+      // The title is shared by every programme that lists the course (D13): only the owning department's
+      // course list may change it, so another department cannot rename a course it does not own.
+      const programme = await tx.programme.findUnique({ where: { id: programmeId }, select: { departmentId: true } });
+      if (programme?.departmentId !== course.owningDepartmentId) {
+        throw new UserError(
+          `${input.code} is owned by ${course.owningDepartment.code}; only ${course.owningDepartment.code} can change its title (“${course.title}”).`,
+          { title: `Keep “${course.title}”` },
+        );
+      }
       course = await tx.course.update({ where: { id: course.id }, data: { title: input.title } });
     }
   } else {

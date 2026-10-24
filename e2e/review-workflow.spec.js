@@ -265,6 +265,21 @@ test("a syllabus goes V1.0 → V4.0 with an expert's link review, is unlocked an
       .digest("hex"),
   ).toBe(first.headers()["x-document-sha256"]);
 
+  // The frozen PDF prints a QR code to the public verification page, which checks a copy in the browser.
+  const documentId = first.headers()["x-document-id"];
+  await page.goto(`/verify/${documentId}`);
+  await expect(page.getByText("Approved syllabus")).toBeVisible();
+  await expect(page.getByText("Replaced by a later approved version")).toBeVisible(); // V4.1 is official now
+  const copy = { name: "copy.pdf", mimeType: "application/pdf" };
+  await page.getByLabel("Check a copy of the PDF").setInputFiles({ ...copy, buffer: await first.body() });
+  await expect(page.getByText("Genuine")).toBeVisible();
+  await page.getByLabel("Check a copy of the PDF").setInputFiles({ ...copy, buffer: Buffer.from("%PDF-1.7 edited") });
+  await expect(page.getByText("Does not match")).toBeVisible();
+  await page.goto("/verify/not-a-real-code");
+  await expect(page.getByText("No approved document has this verification code.")).toBeVisible();
+  await page.goBack();
+  await page.goBack();
+
   // The record: every version, the comparison, and the Action Taken reports.
   await page.getByRole("link", { name: /Inputs, versions/ }).click();
   await page.getByRole("tab", { name: "Versions" }).click();

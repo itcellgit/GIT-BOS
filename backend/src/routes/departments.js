@@ -250,15 +250,18 @@ departmentsRouter.post(
           userId: "Not a faculty member of this department",
         });
       }
-      if (data.role === "COORDINATOR") {
-        const existing = await db.courseAssignment.findFirst({ where: { schemeId, courseId, role: "COORDINATOR" } });
-        if (existing && existing.userId !== data.userId) {
-          throw new UserError(
-            "This course already has a Course Coordinator. Remove them first, or add this person as a co-author.",
-          );
-        }
-      }
       await db.$transaction(async (tx) => {
+        if (data.role === "COORDINATOR") {
+          // One Course Coordinator per (scheme, course): the lock makes two simultaneous assignments of the
+          // same course run one after the other, so the second sees the first and is refused.
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`coordinator:${schemeId}:${courseId}`}))`;
+          const existing = await tx.courseAssignment.findFirst({ where: { schemeId, courseId, role: "COORDINATOR" } });
+          if (existing && existing.userId !== data.userId) {
+            throw new UserError(
+              "This course already has a Course Coordinator. Remove them first, or add this person as a co-author.",
+            );
+          }
+        }
         const row = await tx.courseAssignment.upsert({
           where: { schemeId_courseId_userId: { schemeId, courseId, userId: data.userId } },
           update: { role: data.role },

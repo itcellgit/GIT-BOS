@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { AlertTriangle, Check, CloudOff, Eye, FileText, History, Loader2, RotateCw } from "lucide-react";
 import { formatLabels } from "@acp/shared/domain/schemes/rules";
 import { syllabusTotals } from "@acp/shared/domain/syllabi/content";
+import { sectionEnabled } from "@acp/shared/domain/syllabi/sections";
 import {
   issuesBySection,
   summarizeIssues,
@@ -46,12 +47,9 @@ function sectionsFor(format) {
     ["header", "Course details"],
     ["objectives", "Learning objectives"],
     ["prerequisites", format?.prerequisiteLabel ?? "Pre-requisites"],
-    ...(hasUnits
-      ? [
-          ["units", "Units"],
-          ["flipped", "Flipped classroom"],
-        ]
-      : []),
+    ...(hasUnits ? [["units", "Units"]] : []),
+    // Dean Academics can turn the flipped classroom off for a format (section layout, README §5).
+    ...(hasUnits && sectionEnabled(format, "flipped") ? [["flipped", "Flipped classroom"]] : []),
     ...(hasExperiments ? [["experiments", hasUnits ? "Practical component" : "Experiments"]] : []),
     ["books", "Books"],
     ["twsl", "TW and SL"],

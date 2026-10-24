@@ -67,7 +67,7 @@ The `@example.edu` demo accounts are created only when `NODE_ENV` is not `produc
 
 A pre-commit hook (Husky + lint-staged) formats and lints staged files.
 
-**Deployment (Hostinger VPS).** On the server: install Docker, copy `.env.example` to `.env` and fill in the production section (`DOMAIN`, `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://<DOMAIN>`, SMTP, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`), then:
+**Deployment (Hostinger VPS).** On the server: install Docker, copy `.env.example` to `.env` and fill in the production section (`DOMAIN`, `POSTGRES_PASSWORD`, `APP_DB_PASSWORD`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://<DOMAIN>`, SMTP, `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`), then:
 
 ```bash
 docker compose build
@@ -76,7 +76,7 @@ docker compose run --rm app npm run db:seed -w backend      # first install only
 docker compose up -d
 ```
 
-Caddy obtains the HTTPS certificate for `DOMAIN` automatically. Backups: see §10 "VPS set-up".
+Caddy obtains the HTTPS certificate for `DOMAIN` automatically. The app connects as `acp_app`, and migrations run as the database owner (`MIGRATE_DATABASE_URL`); compose sets both. Backups: `deploy/backup/backup.sh` nightly, `deploy/backup/restore-test.sh` monthly; set-up and the restore procedure are in [deploy/RESTORE.md](deploy/RESTORE.md).
 
 ## Contents
 
@@ -144,11 +144,12 @@ Where these documents conflict with the decisions below, **the decisions below w
 | D14 | **One repository, three npm workspaces:** `backend/` (Express API), `frontend/` (React app), `shared/` (rules and validation used by both). In production Express serves the built React app, so it deploys as **one container**. Import rules between the folders are enforced by ESLint (§10, "Folder structure"). |
 | D15 | **Super Admin:** full access everywhere (still audit-logged); signs in with **email + password** (12+ characters, letters and digits), must replace an initial password at first sign-in, can reset a forgotten password with an emailed code. Only a Super Admin can create or remove another, and the last one cannot be removed or deactivated. After granting the role, a Super Admin sets the colleague's initial password on the Users page (also used to reset a colleague's lost password); the colleague is signed out and must replace it at the next sign-in. Passwords can never be created for any other role. Email and initial password come from `.env` (`SUPER_ADMIN_*`); `npm run super-admin` recovers a lost password. Ordinary users keep one-time email codes. |
 | D16 | **One print path:** a print layout is a pure function in `shared/src/print/` that turns the syllabus JSON into a complete HTML document. The browser preview and the server PDF both use it, so they cannot differ. PDFs come from headless Chromium: Gotenberg in production, Playwright's Chromium in development. Standard text blocks use a small, escaped formatting (pipe tables, `-` and `1.` lists, `**bold**`) so Dean Academics can edit the CIE/SEE tables and rubrics without a developer. |
-| D17 | **Sign-in with Google only** (23 Oct 2026, answers Q6): everyone signs in with their **@git.edu Google Workspace account** (`GOOGLE_HOSTED_DOMAIN`; Google's signed `hd` claim is checked on the server), and only if the Administrator has added them. Email-code sign-in is removed in production; it remains in development only, for the `@example.edu` demo accounts and the end-to-end tests. The Super Admin keeps email + password (D15) as the way in if Google is unavailable. |
-| D18 | **Reset to the default password** (23 Oct 2026): a Super Admin can reset any other active user's password to `DEFAULT_RESET_PASSWORD` ("Password@123" unless set) from the Users page. The user is signed out everywhere, then signs in with **Sign in with password**, and is **not** forced to change it (decided by the IT Cell). Every reset is audit-logged. This extends D15: passwords are no longer limited to Super Admins, but only a Super Admin can give someone a password, and only Super Admins can reset their own by email. |
+| D17 | **Sign-in with Google only** (23 Oct 2026, answers Q6): everyone signs in with their **@git.edu Google Workspace account** (`GOOGLE_HOSTED_DOMAIN`; Google's signed `hd` claim is checked on the server), and only if the Administrator has added them. Email-code sign-in is removed in production; it remains in development only, for the `@example.edu` demo accounts and the end-to-end tests. The Super Admin keeps email + password (D15) as the way in if Google is unavailable. Microsoft sign-in, if it is ever configured, is limited to the institute's own tenant: `MICROSOFT_TENANT_ID` must be the tenant's ID (a GUID); `common` or `organizations` are refused and the provider stays off. Only Google is trusted to link a sign-in to an existing account by email (24 Oct 2026). |
+| D18 | **Reset to the default password** (23 Oct 2026): a Super Admin can reset any other active user's password to `DEFAULT_RESET_PASSWORD` ("Password@123" unless set) from the Users page. The user is signed out everywhere, then signs in with **Sign in with password** and **must choose a new password** before using the portal (revised 24 Oct 2026; the shared default would otherwise stay valid). Production has no built-in default: the reset is refused until `DEFAULT_RESET_PASSWORD` is set. An Administrator cannot add a role to their own account; another Administrator or a Super Admin does it. Every reset is audit-logged. This extends D15: passwords are no longer limited to Super Admins, but only a Super Admin can give someone a password, and only Super Admins can reset their own by email. |
 | D19 | **Approved syllabi for everyone** (23 Oct 2026): every user with a role (any department) can list a scheme's approved syllabi and view or download each one (sidebar **Approved syllabi**, or **Approved syllabi** on a scheme page). Only the official version approved by the Academic Council is shared, served from its frozen PDF; working copies, versions and review history stay limited to the department (`syllabus.view`). Permission `syllabus.viewApproved`; API `GET /api/schemes/:schemeId/approved-syllabi` and `…/:courseId/pdf` (`?download=1`). A syllabus reopened for a correction keeps showing its approved copy, marked "Correction in progress". |
 | D20 | **List tables: search, filters, sorting, pagination** (23 Oct 2026). One shared implementation: `frontend/src/lib/data-table.js` (pure query rules, unit-tested), `hooks/use-data-table.js` (state kept in the URL per table, e.g. `?users.q=asha&users.page=2`, so Back, refresh and shared links keep the view) and `components/data-table/` (toolbar, sortable headers, pagination). Used on Users, Department courses / reviewers / meetings, Dashboard courses, Approved syllabi and scheme amendments. Filtering is client-side (the lists are institution-sized); scheme course lists keep their official order and are not sorted or paged. |
 | D21 | **Email notifications through an outbox** (24 Oct 2026, Phase 5): workflow events write `notification` rows in the same transaction as the change, and a sender in the API process emails them (digests for inputs, expert comments and *Needs revision*; retries; per-user opt-out under *My account*; *Email log* for administrators). Chosen over pg-boss: no new dependency, and a notification exists exactly when its change commits. See Phase 5 in §12. |
+| D22 | **Pre-pilot hardening** (24 Oct 2026, from the audit in `AUDIT.md`): the app connects as a least-privilege role `acp_app`, created by `deploy/db-init` (`APP_DB_PASSWORD`), and migrations run as the owner (`MIGRATE_DATABASE_URL`). The audit log is append-only in the database: a trigger refuses changes and deletes, except clearing the actor when a user is deleted. Request limits in production: 600 requests/min per user, 20 PDFs/min, 30/min per IP on public expert and verification links, at most 200 comments per expert link; at most 2 PDFs render at once, with 20 waiting. Sessions last 2 days. An approval stores a print snapshot (scheme, lists, text blocks, logo), so a PDF frozen later still prints what was approved. A faculty member can edit a course only while they hold the Faculty role in its department. Only the owning department can rename a shared course. Excel imports are refused above 50 MB unpacked. Pending *Needs revision* checks resume after a restart. |
 
 ---
 
@@ -385,7 +386,7 @@ The header carries the semester, meeting date and time, venue, and course name a
   - Action Taken report PDF, per stage
   - **Compiled syllabus book** per programme, semester or scheme: cover, scheme table, a clickable table of contents with PDF bookmarks, then the approved syllabi in order
 - **Approved versions are frozen:** when V4.x is approved, its PDF is generated once and stored with a checksum, along with the `layout_version` used. If the layout is redesigned later, approved documents still reprint exactly as they were approved. Drafts are rendered on demand.
-- **Optional:** a QR code on approved PDFs linking to a verification page, which confirms the printed copy is the official approved version.
+- **Verification QR code — ✅ 24 Oct 2026:** every approved PDF frozen since `LAYOUT_VERSION` 5 ends with a QR code and link to the public page `/verify/<id>`. The id is a random UUID, also in the `X-Document-Id` header. The page needs no sign-in and shows the course, scheme, version, approval date and whether that version is still the official one. A visitor can choose their copy of the PDF: its SHA-256 is computed in the browser and compared with the stored checksum (**Genuine** or **Does not match**).
 - **Optional Word copy:** if someone needs an editable copy, an approximate .docx can be added later from the same HTML. It is not a v1 requirement.
 
 ---
@@ -561,6 +562,7 @@ All endpoints are under `/api` and return JSON (`{ ok, data, message }` or `{ ok
   - kept 30 days daily, then 12 monthly
   - Hostinger weekly snapshots as a second layer
   - **test a restore every month**
+  - scripts and procedure: `deploy/backup/`, [deploy/RESTORE.md](deploy/RESTORE.md)
 - **Domain:** a subdomain on the institute's domain, e.g. `syllabus.<institute-domain>`, with a DNS A record from institute IT. Set `BETTER_AUTH_URL=https://<that domain>`.
 
 ### Content editing note
@@ -586,7 +588,8 @@ Unit content uses a restricted rich-text editor (e.g. Tiptap) that allows only b
 - Security headers (Content-Security-Policy, X-Content-Type-Options, frame protection) from Helmet and Caddy; HSTS from Caddy.
 - Expert tokens: random 256-bit value with only its hash stored, an expiry date, the ability to revoke, request limits, and read-only access to one version.
 - Every state change, unlock, approval and configuration change goes to the **append-only audit log**.
-- HTTPS only; secrets kept in environment variables or a secrets manager; least-privilege database user.
+- HTTPS only; secrets kept in environment variables or a secrets manager; least-privilege database user (`acp_app`, D22).
+- Request limits in production (D22): per user, per PDF and on the public expert and verification links; PDF rendering is queued.
 - Personal data is limited to names, designations and email addresses of staff and reviewers.
 - AI calls are made from the server only. Reviewers' contact details are never sent to the AI provider (§15.3).
 - Usability:
@@ -681,7 +684,7 @@ Build the workflow first, then add AI on top of it in this order:
   - with AI turned off, the whole workflow still works
 
 ### Phase 3 — Expert link and remaining formats
-**Status: ✅ built 23 Oct 2026** (the optional QR code is not done)
+**Status: ✅ built 23 Oct 2026** (verification QR code added 24 Oct 2026)
 - Expert links (issue, expire, revoke) with comments by unit — **✅**
   - review page → *Expert links* (BoS Coordinator, during the Industry Experts & Alumni stage): choose the expert from the reviewer directory and the number of days (1–60); optionally email the link
   - the token is 256 random bits and only its SHA-256 hash is stored, so the link is shown once (revoke and reissue it if lost); one active link per expert per version
@@ -692,14 +695,16 @@ Build the workflow first, then add AI on top of it in this order:
   - rules (§9): exactly the configured number of experiments and open-ended experiments, each with a title and hours, and experiment hours = the scheme's P hours; unit and flipped-class rules apply only when the format has units
   - one print layout (`syllabus-layout.js`, `LAYOUT_VERSION` 2) prints *Practical Component* (Integrated) or *List of Experiments* (Lab) and leaves out what a format does not have; the editor shows only the format's sections (`syllabus-sections.jsx`)
   - **to do (Dean Academics, no code needed):** CIE/SEE schemes and rubrics are seeded for Theory only; add text blocks for the other formats on the scheme page (Appendix B lists what they contain). The layouts follow Appendix B because the Word templates were not on the development machine: compare them side by side with the templates before the pilot
-- Frozen PDFs for approved versions — **✅** `GeneratedDocument`: generated right after approval (or at the first download if no PDF engine was available), stored with its SHA-256 and layout version, and served unchanged from then on (`X-Document-SHA256` header); a database trigger refuses changes to a frozen row. Optional verification QR code — not done
+- Frozen PDFs for approved versions — **✅** `GeneratedDocument`: generated right after approval (or at the first download if no PDF engine was available), stored with its SHA-256 and layout version, and served unchanged from then on (`X-Document-SHA256` header); a database trigger refuses changes to a frozen row. Verification QR code — **✅** (§8)
 - Tests: workflow, format and print unit tests; `e2e/review-workflow.spec.js` now includes an expert commenting through a real link, revocation and the frozen PDF; `e2e/formats.spec.js` covers the Lab and Integrated editors
 - **Accept when:** an external expert comments through the link, and one course of each format produces a correct PDF.
 
 ### Phase 4 — Programme level and scheme change
 **Status: ✅ built 23 Oct 2026; verified 24 Oct 2026** — the full end-to-end suite passes on a fresh database, including `e2e/dashboard.spec.js` and `e2e/scheme-change.spec.js` (clone → copy course list → carry a syllabus forward as V1.0 → amend the scheme)
 - Dashboards: status by department, programme and semester
-- Compiled syllabus book
+- Compiled syllabus book: per programme (course list page) or **for the whole scheme** (scheme page, Dean Academics; `GET /api/schemes/:id/book/pdf`, `?semester=`). The whole-scheme book has one part per programme in its scheme tables, contents and bookmarks, and prints a course shared by programmes once
+- Branding (Layer 1): institute name, short name, address and logo (PNG or JPEG, up to 200 KB) under *Administration → Departments*, printed on syllabi, Action Taken reports and the book cover
+- Section layout per format (Layer 1): order, optional sections (flipped classroom, delivery methods, learning activities, standard text) on or off, and heading labels, from **Sections** on a format. On a published scheme the change is an amendment
 - Scheme clone, carrying old syllabi forward into a new scheme, amendments with "needs revision" flags
 - **Accept when:** a cloned "test 2028" scheme is published and a 2025 syllabus is carried forward into it as V1.0.
 

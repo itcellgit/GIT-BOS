@@ -3,14 +3,109 @@ import { Router } from "express";
 import { hashPassword } from "better-auth/crypto";
 import { can } from "@acp/shared/domain/auth/permissions";
 import { initialPasswordSchema, passwordProblem } from "@acp/shared/schemas/account";
-import { departmentSchema, programmeSchema, roleAssignmentSchema, userSchema } from "@acp/shared/schemas/config";
+import {
+  departmentSchema,
+  institutionSchema,
+  programmeSchema,
+  roleAssignmentSchema,
+  userSchema,
+} from "@acp/shared/schemas/config";
+import multer from "multer";
 import { assertPermission } from "../auth/session.js";
 import { NotFoundError, UserError } from "../errors.js";
-import { handle } from "../http/handler.js";
+import { handle, sendError } from "../http/handler.js";
 import { db } from "../infra/db.js";
 import { writeAudit } from "../services/audit.js";
+import { logoPath, logoTypeOf, MAX_LOGO_BYTES } from "../services/institution.js";
 
 export const adminRouter = Router();
+
+// --- Institution (branding printed on every document; README §5) -----------------------
+
+async function institutionView() {
+  const row = await db.institutionSettings.findUnique({ where: { id: 1 } });
+  const { logo, logoType: _t, logoPath: _p, ...fields } = row ?? { name: "" };
+  return { ...fields, logoUrl: logo ? logoPath(row.updatedAt.getTime()) : null };
+}
+
+adminRouter.get(
+  "/institution",
+  handle(null, async (_data, req) => {
+    assertPermission(req, "institution.manage");
+    return institutionView();
+  }),
+);
+
+adminRouter.put(
+  "/institution",
+  handle(
+    institutionSchema,
+    async (data, req) => {
+      const actor = assertPermission(req, "institution.manage");
+      await db.$transaction(async (tx) => {
+        await tx.institutionSettings.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+        await writeAudit(
+          { actorId: actor.id, action: "institution.update", entityType: "Institution", details: data },
+          tx,
+        );
+      });
+    },
+    "Institution details saved",
+  ),
+);
+
+const logoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_LOGO_BYTES } });
+
+adminRouter.post(
+  "/institution/logo",
+  (req, res, next) =>
+    logoUpload.single("logo")(req, res, (err) =>
+      err
+        ? sendError(
+            res,
+            new UserError(err.code === "LIMIT_FILE_SIZE" ? "The logo must be 200 KB or smaller." : err.message),
+          )
+        : next(),
+    ),
+  handle(
+    null,
+    async (_data, req) => {
+      const actor = assertPermission(req, "institution.manage");
+      if (!req.file?.size) throw new UserError("Choose a PNG or JPEG image.");
+      const type = logoTypeOf(req.file.buffer);
+      if (!type) throw new UserError("The logo must be a PNG or JPEG image.");
+      await db.$transaction(async (tx) => {
+        await tx.institutionSettings.update({ where: { id: 1 }, data: { logo: req.file.buffer, logoType: type } });
+        await writeAudit(
+          {
+            actorId: actor.id,
+            action: "institution.logo",
+            entityType: "Institution",
+            details: { type, bytes: req.file.size },
+          },
+          tx,
+        );
+      });
+      return institutionView();
+    },
+    "Logo saved. It prints on documents made from now on; approved PDFs keep theirs.",
+  ),
+);
+
+adminRouter.delete(
+  "/institution/logo",
+  handle(
+    null,
+    async (_data, req) => {
+      const actor = assertPermission(req, "institution.manage");
+      await db.$transaction(async (tx) => {
+        await tx.institutionSettings.update({ where: { id: 1 }, data: { logo: null, logoType: null } });
+        await writeAudit({ actorId: actor.id, action: "institution.logoRemove", entityType: "Institution" }, tx);
+      });
+    },
+    "Logo removed",
+  ),
+);
 
 // --- Departments and programmes -------------------------------------------------
 
@@ -86,7 +181,10 @@ async function otherActiveSuperAdmins(userId) {
  * The password a Super Admin can reset any user to (DEFAULT_RESET_PASSWORD; "Password@123" if unset).
  * The user may keep it; they can change it under My account.
  */
-const defaultResetPassword = process.env.DEFAULT_RESET_PASSWORD || "Password@123";
+// Production needs its own secret default: a default known outside the IT cell (as "Password@123" is, from
+// the docs) would let anyone sign in to a reset account before its owner does. Development keeps a fallback.
+const defaultResetPassword =
+  process.env.DEFAULT_RESET_PASSWORD || (process.env.NODE_ENV === "production" ? null : "Password@123");
 
 async function isSuperAdminUser(userId) {
   return (await db.roleAssignment.count({ where: { userId, role: "SUPER_ADMIN" } })) > 0;
@@ -110,7 +208,7 @@ adminRouter.get(
     return {
       actorIsSuperAdmin,
       // Shown to Super Admins only, so they can tell the user what to sign in with.
-      defaultPassword: actorIsSuperAdmin ? defaultResetPassword : null,
+      defaultPassword: actorIsSuperAdmin ? (defaultResetPassword ?? "") : null,
       departments,
       users: users.map(({ accounts, ...u }) => ({ ...u, hasPassword: accounts.length > 0 })),
     };
@@ -165,6 +263,11 @@ adminRouter.post(
       const actor = assertPermission(req, "users.manage");
       if (data.role === "SUPER_ADMIN" && !can(actor, "superAdmins.manage")) {
         throw new UserError("Only a Super Admin can make someone a Super Admin.");
+      }
+      // Separation of duties: an Administrator cannot give themself a role (e.g. BoS Coordinator, then approve
+      // syllabi). Another Administrator or a Super Admin does it, and it is audit-logged.
+      if (userId === actor.id && !can(actor, "superAdmins.manage")) {
+        throw new UserError("You cannot add a role to your own account. Ask another Administrator or a Super Admin.");
       }
       const existing = await db.roleAssignment.findFirst({
         where: { userId, role: data.role, departmentId: data.departmentId },
@@ -283,7 +386,8 @@ adminRouter.post(
 
 /**
  * A Super Admin resets any other user's password to the default (DEFAULT_RESET_PASSWORD), e.g. for
- * someone who cannot use Google sign-in. The user is signed out everywhere and may keep the default.
+ * someone who cannot use Google sign-in. The user is signed out everywhere and must choose their own
+ * password at the next sign-in (README D18, revised 24 Oct 2026).
  */
 adminRouter.post(
   "/users/:id/password/default",
@@ -296,6 +400,11 @@ adminRouter.post(
       const user = await db.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true } });
       if (!user) throw new NotFoundError("User not found.");
       if (!user.isActive) throw new UserError("Activate the account before resetting its password.");
+      if (!defaultResetPassword) {
+        throw new UserError(
+          "DEFAULT_RESET_PASSWORD is not set on the server, so passwords cannot be reset to a default.",
+        );
+      }
       const problem = passwordProblem(defaultResetPassword);
       if (problem) throw new UserError(`DEFAULT_RESET_PASSWORD in the server settings is not allowed: ${problem}`);
 
@@ -304,7 +413,8 @@ adminRouter.post(
         const credential = await tx.account.findFirst({ where: { userId, providerId: "credential" } });
         if (credential) await tx.account.update({ where: { id: credential.id }, data: { password: hash } });
         else await tx.account.create({ data: { userId, providerId: "credential", accountId: userId, password: hash } });
-        await tx.user.update({ where: { id: userId }, data: { passwordChangeRequired: false } });
+        // The default is shared knowledge, so the owner must replace it straight after signing in.
+        await tx.user.update({ where: { id: userId }, data: { passwordChangeRequired: true } });
         await tx.session.deleteMany({ where: { userId } });
         await writeAudit(
           { actorId: actor.id, action: "user.passwordResetToDefault", entityType: "User", entityId: userId },
@@ -312,7 +422,7 @@ adminRouter.post(
         );
       });
     },
-    "Password reset to the default. The user can now sign in with it.",
+    "Password reset to the default. The user must choose a new password when signing in with it.",
   ),
 );
 

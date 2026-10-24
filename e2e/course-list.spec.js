@@ -144,3 +144,27 @@ test("BoS Coordinator downloads the compiled syllabus book of a semester", async
   expect(book.getPageCount()).toBeGreaterThan(3);
   expect(book.catalog.lookup(PDFName.of("Outlines"))).toBeTruthy();
 });
+
+test("Dean Academics downloads the whole-scheme syllabus book, each shared course once", async ({ page }) => {
+  // README §8: every programme of the scheme in one book; a course shared by programmes is printed once.
+  await signIn(page, "bos.cse@example.edu");
+  const department = (await (await page.request.get("/api/departments/CSE")).json()).data;
+  const approved = department.courses.find((c) => c.syllabus?.status === "APPROVED");
+  test.skip(!approved, "needs an approved syllabus (run review-workflow.spec.js first)");
+  // A BoS Coordinator cannot compile the whole scheme.
+  expect((await page.request.get(`/api/schemes/${approved.schemeId}/book/pdf`)).status()).toBe(403);
+
+  await page.context().clearCookies();
+  await signIn(page, "dean@example.edu");
+  await page.goto(`/schemes/${approved.schemeId}`);
+  await page.getByRole("button", { name: "Syllabus book" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: `Semester ${approved.semester}` }).click();
+  const file = await download;
+  expect(file.suggestedFilename().endsWith(`_all_programmes_sem${approved.semester}_syllabus_book.pdf`)).toBe(true);
+  const book = await PDFDocument.load(
+    await (await page.request.get(`/api/schemes/${approved.schemeId}/book/pdf?semester=${approved.semester}`)).body(),
+  );
+  expect(book.getPageCount()).toBeGreaterThan(3);
+  expect(book.catalog.lookup(PDFName.of("Outlines"))).toBeTruthy();
+});

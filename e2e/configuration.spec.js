@@ -74,3 +74,41 @@ test("BoS Coordinator assigns faculty to a course and removes the assignment", a
   await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
   await expect(mine).toHaveCount(0);
 });
+test("Dean Academics sets a format's section order, turns a section off and renames a heading", async ({ page }) => {
+  // On a draft copy of 2025, so the published scheme (and its syllabi) are not amended by the test.
+  await signIn(page, "dean@example.edu");
+  await page.goto("/schemes");
+  await page.getByRole("button", { name: "New scheme" }).click();
+  const code = unique("T");
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Start from").click();
+  await page.getByRole("option", { name: "Copy of 2025 Scheme" }).click();
+  await dialog.getByLabel("Code", { exact: true }).fill(code);
+  await dialog.getByLabel("Name").fill(`Test Scheme ${code}`);
+  await dialog.getByRole("button", { name: "Create draft" }).click();
+  await expect(page.getByRole("heading", { name: `Test Scheme ${code}` })).toBeVisible();
+  try {
+    await page.getByRole("tab", { name: "Formats" }).click();
+    const theory = page.locator("[data-slot=card]").filter({ hasText: /^Theory/ });
+    await theory.getByRole("button", { name: "Sections" }).click();
+    dialog = page.getByRole("dialog");
+    for (let i = 0; i < 9; i++) await dialog.getByRole("button", { name: "Move Course outcomes up" }).click();
+    await dialog.getByLabel("Print Flipped classroom").uncheck();
+    await dialog.getByLabel("Heading for Books and e-resources", { exact: true }).fill("Text and Reference Books");
+    await dialog.getByRole("button", { name: "Save layout" }).click();
+    await expect(page.getByText("Section layout saved")).toBeVisible();
+
+    // Saved: the dialog opens with the new layout.
+    await theory.getByRole("button", { name: "Sections" }).click();
+    dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("listitem").first()).toContainText("Course outcomes");
+    await expect(dialog.getByLabel("Print Flipped classroom")).not.toBeChecked();
+    await expect(dialog.getByLabel("Heading for Books and e-resources", { exact: true })).toHaveValue(
+      "Text and Reference Books",
+    );
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    const id = page.url().split("/").at(-1);
+    await page.request.delete(`/api/schemes/${id}`);
+  }
+});

@@ -76,8 +76,20 @@ export async function recordAmendment(tx, { schemeId, actorId, action, summary, 
  * stores the counts on the flags. A failure is logged: the flags stay, only without counts.
  */
 export async function recheckAmendment(amendmentId) {
+  return recheckFlags({ amendmentId });
+}
+
+/**
+ * The re-check runs after the response, in memory, so a restart in between would leave flags without counts.
+ * The server calls this at start-up to finish any open flag still missing them.
+ */
+export function recheckPendingFlags() {
+  return recheckFlags({ resolvedAt: null, errorCount: null });
+}
+
+async function recheckFlags(where) {
   const flags = await db.syllabusRevisionFlag.findMany({
-    where: { amendmentId },
+    where,
     include: { syllabus: { select: { schemeId: true, courseId: true } } },
   });
   for (const flag of flags) {

@@ -22,6 +22,9 @@ expertRouter.use((_req, res, next) => {
   next();
 });
 
+/** Comments one expert link can add (README §11 "request limits"); far above a real review. */
+export const MAX_COMMENTS_PER_LINK = 200;
+
 const closedMessage = "The expert review of this syllabus has closed, so comments can no longer be added or removed.";
 
 async function comments(linkId) {
@@ -62,6 +65,12 @@ expertRouter.post(
     async (body, req) => {
       const { link, open } = await openExpertLink(req.params.token);
       if (!open) throw new UserError(closedMessage);
+      // A leaked link must not flood the syllabus: every comment needs an action taken before the stage closes.
+      if ((await db.reviewInput.count({ where: { expertLinkId: link.id } })) >= MAX_COMMENTS_PER_LINK) {
+        throw new UserError(
+          `This link has reached its limit of ${MAX_COMMENTS_PER_LINK} comments. Please send any further remarks to the BoS Coordinator.`,
+        );
+      }
       await db.$transaction(async (tx) => {
         const input = await tx.reviewInput.create({
           data: {

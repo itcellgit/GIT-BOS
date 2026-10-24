@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { initialPasswordSchema } from "./account.js";
 import { reviewFormSchemas } from "./review.js";
+import { sectionIds } from "../domain/syllabi/sections.js";
 const requiredText = (label, max = 200) =>
   z.string().trim().min(1, `${label} is required`).max(max, `${label} is too long`);
 const optionalText = (max = 500) =>
@@ -142,6 +143,18 @@ export const formatConfigSchema = z
   })
   .refine((v) => v.cloMin <= v.cloMax, { path: ["cloMax"], message: "Maximum must not be less than minimum" })
   .refine((v) => v.coMin <= v.coMax, { path: ["coMax"], message: "Maximum must not be less than minimum" });
+/** A format's section layout (README §5): the full list in print order, each optional section on or off. */
+export const formatSectionsSchema = z.object({
+  sections: z
+    .array(
+      z.object({
+        id: z.enum(sectionIds),
+        enabled: z.boolean().default(true),
+        label: z.string().trim().max(200, "Keep headings under 200 characters").default(""),
+      }),
+    )
+    .refine((list) => new Set(list.map((s) => s.id)).size === list.length, "Each section can appear once"),
+});
 export const outcomeItemSchema = z.object({
   kind: z.enum(outcomeKinds),
   code: code("Code").transform((v) => v.toUpperCase()),
@@ -202,6 +215,13 @@ export const schemeCourseSchema = z.object({
   examHours: optionalWholeNumber(12),
   electiveGroupId: optionalId,
 });
+/** Institution details printed on syllabi, reports and the book (Administrator; README §5 "Branding"). */
+export const institutionSchema = z.object({
+  name: requiredText("Name", 200),
+  shortName: optionalText(60),
+  address: optionalText(300),
+  estd: optionalText(20),
+});
 export const reviewerSchema = z.object({
   name: requiredText("Name"),
   category: z.enum(reviewerCategories),
@@ -228,6 +248,8 @@ export const carryForwardSchema = z.object({
 });
 /** Registry used by the generic form dialog (client) to look up a schema by name. */
 export const formSchemas = {
+  formatSections: formatSectionsSchema,
+  institution: institutionSchema,
   copyCourseList: copyCourseListSchema,
   carryForward: carryForwardSchema,
   department: departmentSchema,

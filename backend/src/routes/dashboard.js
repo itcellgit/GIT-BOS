@@ -2,7 +2,7 @@
 // and semester. Mounted at /api/dashboard. Each person sees the departments they may view (Dean Academics
 // and the Administrator: all; BoS Coordinator and HoD: their own) plus the courses assigned to them.
 import { Router } from "express";
-import { can } from "@acp/shared/domain/auth/permissions";
+import { can, departmentsWithRole } from "@acp/shared/domain/auth/permissions";
 import { progressStep } from "@acp/shared/domain/reviews/progress";
 import { pendingInputs, versionLabel } from "@acp/shared/domain/reviews/workflow";
 import { assertSignedIn } from "../auth/session.js";
@@ -18,7 +18,11 @@ dashboardRouter.get(
     const user = assertSignedIn(req);
     const [departments, assigned, schemes] = await Promise.all([
       db.department.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
-      db.courseAssignment.findMany({ where: { userId: user.id }, select: { schemeId: true, courseId: true } }),
+      // Assigned courses count only while the person is still Faculty of the owning department (as in the editor).
+      db.courseAssignment.findMany({
+        where: { userId: user.id, course: { owningDepartmentId: { in: departmentsWithRole(user, ["FACULTY"]) } } },
+        select: { schemeId: true, courseId: true },
+      }),
       db.scheme.findMany({
         where: { status: { not: "DRAFT" } },
         orderBy: [{ status: "asc" }, { publishedAt: "desc" }],
