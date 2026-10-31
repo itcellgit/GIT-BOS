@@ -1,6 +1,6 @@
 // HTML → PDF with headless Chromium (README §8, §10).
-//   Production: Gotenberg (GOTENBERG_URL, e.g. http://gotenberg:3000 on the internal Docker network).
-//   Development without Gotenberg: the Chromium that Playwright installs for the end-to-end tests.
+//   GOTENBERG_URL set: Gotenberg (e.g. http://gotenberg:3000 on the internal Docker network).
+//   Otherwise: Playwright's Chromium (development, and a VPS without Docker: npx playwright install chromium).
 // Both honour the layout's @page rules (A4, margins, running header, "Page X of Y").
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -58,9 +58,6 @@ async function withRenderSlot(fn) {
 /** Renders a complete HTML document to a PDF Buffer. */
 export async function htmlToPdf(html) {
   const gotenberg = process.env.GOTENBERG_URL;
-  if (!gotenberg && process.env.NODE_ENV === "production") {
-    throw new PdfUnavailableError("PDF generation is not configured (GOTENBERG_URL).");
-  }
   html = await inlineLogo(html); // the renderer loads nothing from the network
   return withRenderSlot(() => (gotenberg ? viaGotenberg(gotenberg, html) : viaPlaywright(html)));
 }
